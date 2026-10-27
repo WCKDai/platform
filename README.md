@@ -1,10 +1,11 @@
 # WCKDai platform
 
-Private control plane for PolyCore, Polykrom and future WCKDai engineering projects.
+Public control plane for PolyCore, Polykrom and future WCKDai engineering projects.
 
 **No real credential belongs in this repository.** Provider/R2/server credentials live in GitHub
 environments, Coolify secrets, or the LiteLLM gateway host. This repository stores the desired
-non-secret configuration, deployment manifests and runbooks.
+non-secret configuration, deployment manifests and runbooks — and it is public, so that rule is
+enforced by review rather than by visibility.
 
 ## Projects
 

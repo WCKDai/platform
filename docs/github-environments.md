@@ -4,6 +4,10 @@ GitHub supports environments only at repository scope. Organization secrets/vari
 shared, but environment protection, reviewers and environment-specific secrets belong to a
 repository. `WCKDai/platform` is therefore the central environment store.
 
+This repository is public on purpose. GitHub Free does not expose organization variables or
+secrets to private repositories, so `platform` could not read the shared R2 configuration while it
+was private. Keep it public, or upgrade the organization before making it private again.
+
 Sensitive placeholders are `SET_ME`. Gates are `INFRA_CONFIGURED=false`,
 `NETWORK_CONFIGURED=false` and `AGENTS_CONFIGURED=false`. Replace values in the environment UI;
 never put a credential in a variable.
