@@ -59,6 +59,11 @@ tar xzf "/tmp/${tarball}" -C "$RUNNER_DIR"
 chown -R "${RUNNER_USER}:${RUNNER_USER}" "$RUNNER_DIR"
 rm -f "/tmp/${tarball}"
 
+# Debian 13 does not ship the ICU that the runner's bundled .NET needs;
+# config.sh fails with "Libicu's dependencies is missing" without this.
+echo "== runner dependencies"
+"${RUNNER_DIR}/bin/installdependencies.sh" >/dev/null
+
 echo "== registration"
 sudo -u "$RUNNER_USER" "${RUNNER_DIR}/config.sh" \
   --unattended \
