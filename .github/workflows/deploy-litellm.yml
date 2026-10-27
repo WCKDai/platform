@@ -140,7 +140,7 @@ jobs:
           COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
         run: |
           set -euo pipefail
-          response="$(curl -sS -w '\n%{http_code}' --max-time 60 \
+          response="$(curl -sS -w '\n%{http_code}' --max-time 60 -X POST \
             -H "Authorization: Bearer $COOLIFY_API_TOKEN" \
             -H "Accept: application/json" \
             "${COOLIFY_URL%/}/api/v1/deploy?uuid=$APP_UUID")"
