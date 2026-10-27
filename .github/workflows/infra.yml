@@ -1,0 +1,60 @@
+name: Infrastructure
+
+# Read-only inventory of the Coolify control plane. Nothing here deploys or
+# changes a service; use it to see what exists before writing a deploy job.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inventory:
+    name: Coolify inventory
+    runs-on: ubuntu-latest
+    environment: infra
+    timeout-minutes: 10
+    steps:
+      - name: Check gate
+        if: vars.INFRA_CONFIGURED != 'true'
+        env:
+          OBSERVED: ${{ vars.INFRA_CONFIGURED }}
+        run: |
+          echo "observed INFRA_CONFIGURED='$OBSERVED'"
+          echo "::error::INFRA_CONFIGURED is not true; refusing to call Coolify"
+          exit 1
+
+      - name: List servers, projects, applications and services
+        env:
+          COOLIFY_URL: ${{ vars.COOLIFY_URL }}
+          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          base="${COOLIFY_URL%/}/api/v1"
+          get() {
+            local path="$1" response code body
+            response="$(curl -sS -w '\n%{http_code}' --max-time 30 \
+              -H "Authorization: Bearer $COOLIFY_API_TOKEN" \
+              -H "Accept: application/json" \
+              "$base$path")"
+            code="$(tail -n 1 <<<"$response")"
+            body="$(sed '$d' <<<"$response")"
+            if [ "$code" != "200" ]; then
+              echo "::error::$path returned HTTP $code: $body"
+              return 1
+            fi
+            printf '%s' "$body"
+          }
+
+          echo "== servers"
+          get /servers | jq -r '.[]? | "\(.uuid)  \(.name)  ip=\(.ip)  reachable=\(.is_reachable // .settings.is_reachable // "?")"'
+          echo
+          echo "== projects"
+          get /projects | jq -r '.[]? | "\(.uuid)  \(.name)"'
+          echo
+          echo "== applications"
+          get /applications | jq -r '.[]? | "\(.uuid)  \(.name)  \(.status // "?")  \(.fqdn // "")"'
+          echo
+          echo "== services"
+          get /services | jq -r '.[]? | "\(.uuid)  \(.name)  \(.status // "?")"'
