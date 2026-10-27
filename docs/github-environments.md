@@ -16,19 +16,23 @@ Protected to the `main` branch.
 
 | Variable | Set to |
 |---|---|
-| `COOLIFY_URL` | Coolify HTTPS URL, no trailing slash |
+| `INFRA_PROVIDER` | `netcup` |
+| `COOLIFY_URL` | Existing Coolify HTTPS URL, no trailing slash |
 | `COOLIFY_API_TOKEN` secret | Coolify API token with least privilege |
-| `COOLIFY_SERVER_UUID` | UUID of the worker server in Coolify |
-| `COOLIFY_PRIVATE_KEY_UUID` | UUID of the Coolify SSH key used for that server |
+| `COOLIFY_SERVER_UUID` | UUID of the Netcup server in Coolify |
 | `COOLIFY_PROJECT_NAME` | `PolyCore` |
 | `COOLIFY_ENVIRONMENT_NAME` | `production` |
-| `HETZNER_LOCATION` | `fsn1` or chosen region |
-| `WORKER_NAME` | `polycore-worker` |
-| `WORKER_TYPE` | `ccx43`, `ax42`, or selected plan |
-| `WORKER_IMAGE` | `ubuntu-24.04` |
-| `HCLOUD_TOKEN` secret | Hetzner Cloud API token if provisioning cloud VMs |
-| `HETZNER_ROBOT_PASSWORD` secret | Only if provisioning a Hetzner dedicated server |
+| `WORKER_NAME` | Coolify server name, e.g. `polycore-worker` |
+| `WORKER_ARCH` | `x64` unless the server is ARM |
+| `WORKER_OS` | exact OS, e.g. `ubuntu-24.04` |
+| `WORKER_CPU_CORES` | actual allocated vCPU count |
+| `WORKER_MEMORY_GB` | actual RAM in GiB |
+| `WORKER_DISK_GB` | usable NVMe/SSD capacity |
+| `RUNNER_LABEL` | `rust-16`, adjusted to actual capacity |
 | `RUNNER_ADMIN_TOKEN` secret | Short-lived fine-grained token/app token for org runner registration |
+
+The server is already connected to Coolify. No cloud-provider provisioning token or SSH-key UUID
+is required.
 
 ## `network`
 

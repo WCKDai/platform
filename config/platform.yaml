@@ -32,13 +32,18 @@ models:
     max_attempts: 6
 
 worker:
-  provider: hetzner
-  preferred_types: [ax42, ccx43]
-  location: fsn1
-  os: ubuntu-24.04
-  cpu_cores: 16
-  memory_gb: 64
-  disk_gb: 360
+  provider: netcup
+  provisioning: existing-coolify-server
+  os: SET_ME
+  arch: x64
+  minimum:
+    cpu_cores: 16
+    memory_gb: 64
+    disk_gb: 360
+  actual_variables:
+    cpu_cores: WORKER_CPU_CORES
+    memory_gb: WORKER_MEMORY_GB
+    disk_gb: WORKER_DISK_GB
   tailscale:
     tailnet_variable: TAILSCALE_TAILNET
     worker_client_id_variable: TAILSCALE_WORKER_CLIENT_ID

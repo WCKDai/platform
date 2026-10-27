@@ -1,24 +1,28 @@
-# Worker VM, Coolify and Tailscale
+# Netcup worker, Coolify and Tailscale
 
-## Sizing
+## Current host
 
-Recommended initial worker:
+The host is an **existing Netcup server already attached to the Coolify control plane**. GitHub
+does not provision the machine. It records the server UUID and deploys services through the
+Coolify API once the server has been identified.
+
+Minimum practical target:
 
 | Resource | Target |
 |---|---|
-| CPU | 16 dedicated vCPU / 8 physical cores with SMT |
+| CPU | 16 dedicated vCPU or equivalent sustained performance |
 | RAM | 64 GB |
-| Disk | 360–500 GB NVMe |
+| Disk | 360 GB usable NVMe/SSD |
 | Network | 1 Gbps |
-| OS | Ubuntu 24.04 LTS, headless |
+| OS | current supported Ubuntu LTS or Debian |
 | Swap | 4–8 GB emergency only |
 
-Hetzner **AX42** is the best price/performance option when available. **CCX43** is the equivalent
-dedicated-cloud choice. Verify current price and availability at order time. Do not use shared
-vCPU plans for Rust CI timing tests.
+Record the actual values in `WORKER_CPU_CORES`, `WORKER_MEMORY_GB`, `WORKER_DISK_GB` and adjust
+`RUNNER_LABEL` accordingly. Do not label a smaller host `rust-16`.
 
-Keep the Coolify control plane on a separate small host. CI must never restart the service that
-manages CI.
+Keep the Coolify control plane isolated from CI workloads. If the Netcup server also runs the
+control plane, create separate resource limits or a dedicated VM/container boundary for runners;
+CI must never be able to restart the service that manages CI.
 
 ## Security boundary
 
@@ -34,16 +38,16 @@ compromised by untrusted workflow code.
 - Never expose a self-hosted runner to fork pull requests.
 - Tailscale and firewall rules allow only Coolify and trusted administrative devices.
 
-## Provision
+## Configure the connected host
 
-1. Create the Ubuntu 24.04 VM and an SSH key dedicated to Coolify.
-2. Add the server in Coolify and record its server UUID and SSH-key UUID.
+1. Open the Netcup server in Coolify and copy its server UUID into `COOLIFY_SERVER_UUID`.
+2. Record the actual OS, architecture, CPU, RAM and disk in the `infra` environment.
 3. Apply firewall rules: public SSH only from admin CIDRs; no public Postgres, Redis, Temporal or
    LiteLLM.
-4. Install Tailscale and join with a tagged, ephemeral OAuth credential.
-5. Put Coolify services on the private Docker network.
+4. Install Tailscale and join using the **worker OAuth client** and `tag:polycore-gateway`.
+5. Put Coolify services on a private Docker network.
 6. Install the GitHub runner outside Coolify's privileged runner integration, or use an
-   ephemeral runner container with no host Docker socket.
+   unprivileged ephemeral runner container with no host Docker socket.
 7. Register the runner in the WCKDai trusted runner group with labels:
 
 ```text
@@ -53,6 +57,8 @@ x64
 rust-16
 trusted
 ```
+
+Use the actual `RUNNER_LABEL` value when the host is not a 16-vCPU class machine.
 
 ## Coolify services
 
@@ -83,7 +89,18 @@ Optional local artifact store. R2 remains the shared sccache and cross-runner ar
 
 ## Capacity policy
 
-- Four agent writers, two verifiers maximum.
+For a 16-vCPU/64-GB host, reserve approximately:
+
+| Service | CPU | RAM |
+|---|---:|---:|
+| LiteLLM + Redis + Postgres | 2 vCPU | 4–6 GB |
+| Temporal + Postgres | 3 vCPU | 8 GB |
+| Langfuse | 2 vCPU | 4 GB |
+| Runner / agents | remaining | remaining |
+
+Start with two agent writers and one verifier, then raise only after measuring CPU steal, load,
+cache-hit rate and queue time. On 32 vCPU/128 GB, start with four writers and two verifiers.
+
 - One Rust compilation/test job at a time unless `sccache` hit rates and CPU headroom prove
   otherwise.
 - Full corpus and simulation jobs are queued outside interactive agent runs.

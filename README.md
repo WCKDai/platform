@@ -20,7 +20,7 @@ live here because this is the central infrastructure repository:
 
 | Environment | Purpose | Access |
 |---|---|---|
-| [`infra`](https://github.com/WCKDai/platform/settings/environments/infra) | Coolify API, Hetzner provisioning, runner registration | `main` only |
+| [`infra`](https://github.com/WCKDai/platform/settings/environments/infra) | Existing Netcup/Coolify server, runner registration | `main` only |
 | [`network`](https://github.com/WCKDai/platform/settings/environments/network) | Tailscale OAuth/auth keys and tailnet settings | `main` only |
 | [`agents`](https://github.com/WCKDai/platform/settings/environments/agents) | LiteLLM/provider keys, model routing, budgets | trusted workflows |
 
@@ -68,7 +68,7 @@ GitHub WCKDai
 3. Replace the placeholder secrets in `infra`, `network` and `agents` through the environment settings.
 4. Create one private R2 cache bucket and a bucket-scoped read/write token.
 5. Replace the organization R2 placeholders and set `R2_CONFIGURED=true` after verification.
-6. Add the worker VM to Coolify and Tailscale.
+6. Configure the existing Netcup/Coolify server UUID, specs and Tailscale worker client.
 7. Register a trusted org runner labelled `rust-16`.
 8. Deploy LiteLLM, Temporal, and observability through Coolify.
 9. Run one end-to-end agent task through implementation, tests, review and merge queue.
