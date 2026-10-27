@@ -79,6 +79,21 @@ jobs:
           fi
           echo "APP_UUID=$uuid" >>"$GITHUB_ENV"
 
+      - name: Set the public domain
+        env:
+          COOLIFY_URL: ${{ vars.COOLIFY_URL }}
+          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          body='{"docker_compose_domains":[{"name":"litellm","domain":"https://llm.polykrom.app"}]}'
+          response="$(curl -sS -w '\n%{http_code}' --max-time 30 -X PATCH \
+            -H "Authorization: Bearer $COOLIFY_API_TOKEN" \
+            -H "Content-Type: application/json" -d "$body" \
+            "${COOLIFY_URL%/}/api/v1/applications/$APP_UUID")"
+          code="$(tail -n 1 <<<"$response")"
+          echo "domain: HTTP $code $(sed '$d' <<<"$response" | head -c 400)"
+          if [ "$code" != "200" ] && [ "$code" != "201" ]; then exit 1; fi
+
       - name: Write the application environment
         env:
           COOLIFY_URL: ${{ vars.COOLIFY_URL }}
@@ -160,10 +175,9 @@ jobs:
               -H "Accept: application/json" \
               "${COOLIFY_URL%/}/api/v1/applications/$APP_UUID" | jq -r '.status // "unknown"')"
             echo "attempt $i: $status"
-            case "$status" in
-              running:healthy) exit 0 ;;
-              *unhealthy*|*exited*|*failed*) echo "::error::$status"; exit 1 ;;
-            esac
+            # The previous deployment's status survives until the new containers replace it,
+            # so only a healthy running application ends the wait; the timeout is the failure.
+            [ "$status" = "running:healthy" ] && exit 0
             sleep 10
           done
           echo "::error::timed out waiting for the application"
