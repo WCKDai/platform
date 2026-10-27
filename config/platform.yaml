@@ -34,7 +34,7 @@ models:
 worker:
   provider: netcup
   provisioning: existing-coolify-server
-  os: SET_ME
+  os: debian-13
   arch: x64
   minimum:
     cpu_cores: 16
