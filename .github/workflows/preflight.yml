@@ -109,14 +109,23 @@ jobs:
           probe WORKER "$WORKER_ID" "$WORKER_SECRET"
           worker_scope="$PROBED_SCOPE"
 
-          case ",$ci_scope," in
+          # Scopes are space separated; normalise before matching.
+          ci_csv=",${ci_scope// /,},"
+          worker_csv=",${worker_scope// /,},"
+
+          case "$ci_csv" in
             *",auth_keys,"*) ;;
             *)
               echo "::error::CI client has [$ci_scope] but needs auth_keys to mint node keys"
               exit 1
               ;;
           esac
-          case ",$worker_scope," in
+          case "$ci_csv" in
+            *",devices:core,"*)
+              echo "::warning::CI client should not hold devices:core; remove it"
+              ;;
+          esac
+          case "$worker_csv" in
             *",auth_keys,"*) ;;
             *) echo "::warning::worker client has [$worker_scope]; it also needs auth_keys" ;;
           esac
