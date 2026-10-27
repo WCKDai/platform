@@ -1,0 +1,186 @@
+name: Deploy LiteLLM
+
+# Creates (or reuses) the LiteLLM docker-compose application in the PolyCore Coolify project,
+# writes its environment from the `agents` environment, then deploys and waits for it to be
+# healthy. Split into three jobs because a job can only read one GitHub environment: `infra`
+# holds the Coolify token, `agents` holds the provider keys.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-litellm
+  cancel-in-progress: false
+
+jobs:
+  provision:
+    name: Provision the application
+    runs-on: ubuntu-latest
+    environment: infra
+    timeout-minutes: 10
+    outputs:
+      uuid: ${{ steps.app.outputs.uuid }}
+    steps:
+      - name: Check gate
+        if: vars.INFRA_CONFIGURED != 'true'
+        run: |
+          echo "::error::INFRA_CONFIGURED is not true; refusing to call Coolify"
+          exit 1
+
+      - name: Find or create the litellm application
+        id: app
+        env:
+          COOLIFY_URL: ${{ vars.COOLIFY_URL }}
+          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
+          PROJECT_UUID: ${{ vars.COOLIFY_PROJECT_UUID }}
+          SERVER_UUID: ${{ vars.COOLIFY_SERVER_UUID }}
+          ENVIRONMENT: ${{ vars.COOLIFY_ENVIRONMENT_NAME }}
+        run: |
+          set -euo pipefail
+          base="${COOLIFY_URL%/}/api/v1"
+          auth=(-H "Authorization: Bearer $COOLIFY_API_TOKEN" -H "Accept: application/json")
+
+          apps="$(curl -fsS --max-time 30 "${auth[@]}" "$base/applications")"
+          uuid="$(jq -r '.[]? | select(.name == "litellm") | .uuid' <<<"$apps" | head -1)"
+
+          if [ -z "$uuid" ]; then
+            body="$(jq -n \
+              --arg project "$PROJECT_UUID" \
+              --arg server "$SERVER_UUID" \
+              --arg env "$ENVIRONMENT" \
+              '{
+                project_uuid: $project,
+                server_uuid: $server,
+                environment_name: $env,
+                git_repository: "https://github.com/WCKDai/platform",
+                git_branch: "main",
+                build_pack: "dockercompose",
+                docker_compose_location: "/services/litellm/docker-compose.yaml",
+                name: "litellm",
+                description: "LiteLLM gateway for PolyCore agents",
+                ports_exposes: "4000",
+                instant_deploy: false
+              }')"
+            response="$(curl -sS -w '\n%{http_code}' --max-time 60 -X POST \
+              "${auth[@]}" -H "Content-Type: application/json" -d "$body" "$base/applications/public")"
+            code="$(tail -n 1 <<<"$response")"
+            payload="$(sed '$d' <<<"$response")"
+            if [ "$code" != "201" ]; then
+              echo "::error::creating the application returned HTTP $code: $payload"
+              exit 1
+            fi
+            uuid="$(jq -r '.uuid' <<<"$payload")"
+            echo "created application $uuid"
+          else
+            echo "reusing application $uuid"
+          fi
+          echo "uuid=$uuid" >>"$GITHUB_OUTPUT"
+
+      - name: Show the application
+        env:
+          COOLIFY_URL: ${{ vars.COOLIFY_URL }}
+          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          curl -fsS --max-time 30 \
+            -H "Authorization: Bearer $COOLIFY_API_TOKEN" \
+            -H "Accept: application/json" \
+            "${COOLIFY_URL%/}/api/v1/applications/${{ steps.app.outputs.uuid }}" \
+            | jq '{uuid, name, status, fqdn, docker_compose_location, docker_compose_domains}'
+
+  configure:
+    name: Write the environment
+    needs: provision
+    runs-on: ubuntu-latest
+    environment: agents
+    timeout-minutes: 10
+    steps:
+      - name: Set application environment
+        env:
+          # A job reads one GitHub environment only. The provider keys live in `agents`, so the
+          # Coolify token must exist there too; it is the same value as the one in `infra`.
+          COOLIFY_URL: https://app.coolify.io
+          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
+          APP_UUID: ${{ needs.provision.outputs.uuid }}
+          LITELLM_MASTER_KEY: ${{ secrets.LITELLM_MASTER_KEY }}
+          LITELLM_SALT_KEY: ${{ secrets.LITELLM_SALT_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          POSTGRES_PASSWORD: ${{ secrets.LITELLM_POSTGRES_PASSWORD }}
+          REDIS_PASSWORD: ${{ secrets.LITELLM_REDIS_PASSWORD }}
+          LITELLM_DOMAIN: https://llm.polykrom.app
+        run: |
+          set -euo pipefail
+          if [ -z "${COOLIFY_API_TOKEN:-}" ]; then
+            echo "::error::add COOLIFY_API_TOKEN to the agents environment; see docs/github-environments.md"
+            exit 1
+          fi
+          base="${COOLIFY_URL%/}/api/v1"
+          echo "configuring $APP_UUID"
+          for name in LITELLM_MASTER_KEY LITELLM_SALT_KEY ANTHROPIC_API_KEY OPENAI_API_KEY \
+                      GEMINI_API_KEY DEEPSEEK_API_KEY POSTGRES_PASSWORD REDIS_PASSWORD LITELLM_DOMAIN; do
+            value="${!name}"
+            if [ -z "$value" ]; then
+              echo "::warning::$name is empty; the container will start without it"
+            fi
+            body="$(jq -n --arg k "$name" --arg v "$value" '{data:[{key:$k,value:$v}]}')"
+            code="$(curl -sS -o /tmp/out -w '%{http_code}' --max-time 30 -X PATCH \
+              -H "Content-Type: application/json" -d "$body" \
+              "$base/applications/$APP_UUID/envs/bulk" || true)"
+            if [ "$code" != "200" ] && [ "$code" != "201" ]; then
+              echo "::error::setting $name returned HTTP $code: $(cat /tmp/out)"
+              exit 1
+            fi
+          done
+
+  deploy:
+    name: Deploy
+    needs: [provision, configure]
+    runs-on: ubuntu-latest
+    environment: infra
+    timeout-minutes: 20
+    steps:
+      - name: Trigger the deployment
+        env:
+          COOLIFY_URL: ${{ vars.COOLIFY_URL }}
+          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
+          APP_UUID: ${{ needs.provision.outputs.uuid }}
+        run: |
+          set -euo pipefail
+          base="${COOLIFY_URL%/}/api/v1"
+          response="$(curl -sS -w '\n%{http_code}' --max-time 60 \
+            -H "Authorization: Bearer $COOLIFY_API_TOKEN" \
+            -H "Accept: application/json" \
+            "$base/deploy?uuid=$APP_UUID")"
+          code="$(tail -n 1 <<<"$response")"
+          body="$(sed '$d' <<<"$response")"
+          echo "deploy: HTTP $code $body"
+          if [ "$code" != "200" ] && [ "$code" != "201" ]; then exit 1; fi
+
+      - name: Wait for a running application
+        env:
+          COOLIFY_URL: ${{ vars.COOLIFY_URL }}
+          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
+          APP_UUID: ${{ needs.provision.outputs.uuid }}
+        run: |
+          set -euo pipefail
+          base="${COOLIFY_URL%/}/api/v1"
+          for i in $(seq 1 60); do
+            status="$(curl -fsS --max-time 30 \
+              -H "Authorization: Bearer $COOLIFY_API_TOKEN" \
+              -H "Accept: application/json" \
+              "$base/applications/$APP_UUID" | jq -r '.status // "unknown"')"
+            echo "attempt $i: $status"
+            case "$status" in
+              running:healthy) exit 0 ;;
+              *unhealthy*|*exited*|*failed*) echo "::error::$status"; exit 1 ;;
+            esac
+            sleep 10
+          done
+          echo "::error::timed out waiting for the application"
+          exit 1
