@@ -76,6 +76,26 @@ jobs:
           echo "::error::NETWORK_CONFIGURED is not true; refusing to join the tailnet"
           exit 1
 
+      - name: Exchange the OAuth client for a token
+        env:
+          TS_CLIENT_ID: ${{ vars.TAILSCALE_CI_CLIENT_ID }}
+          TS_CLIENT_SECRET: ${{ secrets.TAILSCALE_CI_CLIENT_SECRET }}
+        run: |
+          set -euo pipefail
+          response="$(curl -sS -w '\n%{http_code}' \
+            -u "$TS_CLIENT_ID:$TS_CLIENT_SECRET" \
+            -d grant_type=client_credentials \
+            https://api.tailscale.com/api/v2/oauth/token)"
+          code="$(tail -n 1 <<<"$response")"
+          body="$(sed '$d' <<<"$response")"
+          echo "token endpoint: HTTP $code"
+          if [ "$code" != "200" ]; then
+            echo "::error::OAuth client rejected: $body"
+            exit 1
+          fi
+          echo "scope: $(jq -r '.scope' <<<"$body")"
+          jq -e '.access_token != null and .access_token != ""' <<<"$body" >/dev/null
+
       - name: Join the tailnet with the CI OAuth client
         uses: tailscale/github-action@99a8333667fff04fdd6cffb46dfd409f8329a7bf # v4.3.0
         with:
