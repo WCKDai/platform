@@ -1,0 +1,80 @@
+organization: WCKDai
+
+projects:
+  polycore:
+    repository: WCKDai/polycore
+    visibility: public
+    cache_prefix: polycore
+    runner_labels: [self-hosted, linux, x64, rust-16, trusted]
+    task_schema: agent/task.schema.json
+    default_branch: main
+  polykrom:
+    repository: WCKDai/polykrom
+    visibility: public
+    cache_prefix: polykrom
+    runner_labels: [self-hosted, linux, x64, rust-16, trusted]
+    default_branch: main
+
+models:
+  aliases:
+    cheap: deepseek/deepseek-flash
+    standard: claude-sonnet-5-5
+    strong: claude-opus-5-5
+    review: gpt-6.1-sol
+    long_context: gemini-4-argon
+  escalation_order: [cheap, standard, strong]
+  review_provider_family: openai
+  budgets:
+    monthly_usd: 100
+    default_task_usd: 2
+    complex_task_usd: 10
+    phase_gate_task_usd: 50
+    max_attempts: 6
+
+worker:
+  provider: hetzner
+  preferred_types: [ax42, ccx43]
+  location: fsn1
+  os: ubuntu-24.04
+  cpu_cores: 16
+  memory_gb: 64
+  disk_gb: 360
+  tailscale:
+    hostname: polycore-worker
+    tags: [tag:polycore-ci, tag:polycore-gateway]
+  concurrency:
+    agent_writers: 4
+    verifiers: 2
+    concurrent_ci_jobs: 1
+
+cache:
+  provider: cloudflare-r2
+  bucket_variable: R2_BUCKET
+  endpoint_variable: R2_ENDPOINT
+  region: auto
+  ssl: true
+  prefixes:
+    polycore: polycore
+    polykrom: polykrom
+
+coolify:
+  environment: production
+  services:
+    - postgres
+    - redis
+    - litellm
+    - temporal
+    - langfuse
+  private_access: tailscale
+  public_endpoints:
+    coolify_ui: true
+    litellm: false
+    temporal: false
+    langfuse: owner-only
+
+ci:
+  pull_requests: github-hosted-linux
+  merge_and_main: trusted-self-hosted-linux
+  macos: existing-apple-silicon
+  gpu: nightly-only
+  required_runner_label: rust-16
