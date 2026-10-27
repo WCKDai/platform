@@ -1,0 +1,128 @@
+name: Preflight
+
+# Manual credential and connectivity checks. Nothing here provisions or deploys.
+# Each job is gated by its environment flag so an unconfigured control plane
+# fails closed instead of silently skipping.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: preflight
+  cancel-in-progress: false
+
+jobs:
+  cache:
+    name: R2 sccache credentials
+    if: vars.R2_CONFIGURED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Read, write and delete one probe object
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ vars.SCCACHE_REGION }}
+          AWS_EC2_METADATA_DISABLED: "true"
+          R2_BUCKET: ${{ vars.R2_BUCKET }}
+          R2_ENDPOINT: ${{ vars.R2_ENDPOINT }}
+        run: |
+          set -euo pipefail
+          key="_preflight/$(date -u +%Y%m%dT%H%M%SZ).txt"
+          printf 'preflight\n' > probe.txt
+          aws s3api put-object --bucket "$R2_BUCKET" --key "$key" \
+            --body probe.txt --endpoint-url "$R2_ENDPOINT" >/dev/null
+          aws s3api head-object --bucket "$R2_BUCKET" --key "$key" \
+            --endpoint-url "$R2_ENDPOINT" >/dev/null
+          aws s3api delete-object --bucket "$R2_BUCKET" --key "$key" \
+            --endpoint-url "$R2_ENDPOINT" >/dev/null
+          echo "R2 read/write/delete OK in $R2_BUCKET"
+
+      - name: Start sccache against R2
+        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
+
+      - name: Verify the sccache client can open the store
+        env:
+          SCCACHE_BUCKET: ${{ vars.R2_BUCKET }}
+          SCCACHE_ENDPOINT: ${{ vars.R2_ENDPOINT }}
+          SCCACHE_REGION: ${{ vars.SCCACHE_REGION }}
+          SCCACHE_S3_USE_SSL: ${{ vars.SCCACHE_S3_USE_SSL }}
+          SCCACHE_S3_KEY_PREFIX: _preflight
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          set -euo pipefail
+          sccache --start-server
+          sccache --show-stats
+          sccache --stop-server
+
+  network:
+    name: Tailscale CI client
+    if: vars.NETWORK_CONFIGURED == 'true'
+    runs-on: ubuntu-latest
+    environment: network
+    timeout-minutes: 10
+    steps:
+      - name: Join the tailnet with the CI OAuth client
+        uses: tailscale/github-action@99a8333667fff04fdd6cffb46dfd409f8329a7bf # v4.3.0
+        with:
+          oauth-client-id: ${{ vars.TAILSCALE_CI_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TAILSCALE_CI_CLIENT_SECRET }}
+          tags: ${{ vars.TAILSCALE_CI_TAGS }}
+          hostname: polycore-preflight
+          timeout: 2m
+
+      - name: Verify identity, tailnet and tag
+        env:
+          TAILSCALE_TAILNET: ${{ vars.TAILSCALE_TAILNET }}
+          EXPECTED_TAG: ${{ vars.TAILSCALE_CI_TAGS }}
+        run: |
+          set -euo pipefail
+          status="$(sudo tailscale status --json)"
+          jq -e '.BackendState == "Running"' <<<"$status" >/dev/null
+          self="$(jq -r '.Self.DNSName' <<<"$status")"
+          tags="$(jq -r '(.Self.Tags // []) | join(",")' <<<"$status")"
+          echo "self: $self"
+          echo "tags: $tags"
+          case "$self" in
+            *"$TAILSCALE_TAILNET"*) ;;
+            *) echo "::error::node is not in $TAILSCALE_TAILNET"; exit 1 ;;
+          esac
+          case ",$tags," in
+            *",$EXPECTED_TAG,"*) ;;
+            *) echo "::error::node is missing $EXPECTED_TAG"; exit 1 ;;
+          esac
+
+      - name: Log out
+        if: always()
+        run: sudo tailscale logout || true
+
+  infra:
+    name: Coolify control plane
+    if: vars.INFRA_CONFIGURED == 'true'
+    runs-on: ubuntu-latest
+    environment: infra
+    timeout-minutes: 10
+    steps:
+      - name: Verify the API token and server UUID
+        env:
+          COOLIFY_URL: ${{ vars.COOLIFY_URL }}
+          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
+          COOLIFY_SERVER_UUID: ${{ vars.COOLIFY_SERVER_UUID }}
+        run: |
+          set -euo pipefail
+          curl -fsS --max-time 20 \
+            -H "Authorization: Bearer $COOLIFY_API_TOKEN" \
+            -H "Accept: application/json" \
+            "$COOLIFY_URL/api/v1/version"
+          echo
+          servers="$(curl -fsS --max-time 20 \
+            -H "Authorization: Bearer $COOLIFY_API_TOKEN" \
+            -H "Accept: application/json" \
+            "$COOLIFY_URL/api/v1/servers")"
+          jq -e --arg uuid "$COOLIFY_SERVER_UUID" 'any(.[]?; .uuid == $uuid)' \
+            <<<"$servers" >/dev/null
+          echo "Coolify server $COOLIFY_SERVER_UUID is reachable"

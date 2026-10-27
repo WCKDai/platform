@@ -101,4 +101,16 @@ and platform. R2 credentials are low privilege and cache-only; model provider ke
 in GitHub organization secrets. Replace the placeholders and set `R2_CONFIGURED=true` after
 verification. See [cache.md](cache.md).
 
-See [cache.md](cache.md).
+## Preflight
+
+[`.github/workflows/preflight.yml`](../.github/workflows/preflight.yml) is a manual,
+read-only diagnostic. Each job runs only when its gate is `true`:
+
+| Job | Gate | Checks |
+|---|---|---|
+| `cache` | `R2_CONFIGURED` | AWS CLI read/write/delete, then an `sccache` store open |
+| `network` | `NETWORK_CONFIGURED` | CI OAuth client joins, tailnet and `tag:polycore-ci` |
+| `infra` | `INFRA_CONFIGURED` | Coolify token, version endpoint and server UUID |
+
+Run it from **Actions → Preflight → Run workflow** after changing any of those values. The
+`infra` and `network` jobs use the protected environments, so they only run from `main`.

@@ -2,7 +2,7 @@
 
 ## Bucket and token
 
-- One private bucket, e.g. `wckdboy-sccache`.
+- One private bucket, currently `wckd`.
 - Dedicated Cloudflare R2 API token with **Object Read & Write**, scoped to that bucket.
 - Never use an account-wide admin token.
 - Prefix keys by project: `polycore`, `polykrom`, future projects.
@@ -57,6 +57,13 @@ AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
 ```
 
 ## Verification
+
+Dispatch **Preflight** in this repository first. Its `cache` job writes, reads and deletes one
+`_preflight/` object with the plain AWS CLI, then starts `sccache` against the same bucket. A
+`SignatureDoesNotMatch` response means the secret does not belong to the access key ID; issue a
+fresh bucket-scoped token rather than editing the endpoint or region.
+
+Then:
 
 - Run a full CI job twice.
 - Confirm sccache health/stats and nonzero cache hits on the second run.

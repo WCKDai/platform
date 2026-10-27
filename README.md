@@ -67,7 +67,7 @@ GitHub WCKDai
 2. Replace the `SET_ME` variables in `infra` and `network`.
 3. Replace the placeholder secrets in `infra`, `network` and `agents` through the environment settings.
 4. Create one private R2 cache bucket and a bucket-scoped read/write token.
-5. Replace the organization R2 placeholders and set `R2_CONFIGURED=true` after verification.
+5. Replace the organization R2 placeholders and set `R2_CONFIGURED=true` after the Preflight `cache` job passes.
 6. Configure the existing Netcup/Coolify server UUID, specs and Tailscale worker client.
 7. Register a trusted org runner labelled `rust-16`.
 8. Deploy LiteLLM, Temporal, and observability through Coolify.
