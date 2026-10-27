@@ -37,6 +37,10 @@ services:
   litellm:
     image: ghcr.io/berriai/litellm:main-stable
     command: ["--config", "/app/config.yaml", "--port", "4000", "--num_workers", "2"]
+    # Coolify derives the proxy's backend port from an exposed port; without it Traefik
+    # creates the router but no service and answers 503.
+    expose:
+      - "4000"
     environment:
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?set in Coolify}
       LITELLM_SALT_KEY: ${LITELLM_SALT_KEY:?set in Coolify}
