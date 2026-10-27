@@ -104,7 +104,8 @@ verification. See [cache.md](cache.md).
 ## Preflight
 
 [`.github/workflows/preflight.yml`](../.github/workflows/preflight.yml) is a manual,
-read-only diagnostic. Each job runs only when its gate is `true`:
+read-only diagnostic. Each job starts with a gate check and stops before touching anything when
+its flag is not `true`:
 
 | Job | Gate | Checks |
 |---|---|---|
