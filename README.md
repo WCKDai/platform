@@ -24,9 +24,9 @@ live here because this is the central infrastructure repository:
 | [`network`](https://github.com/WCKDai/platform/settings/environments/network) | Tailscale OAuth/auth keys and tailnet settings | `main` only |
 | [`agents`](https://github.com/WCKDai/platform/settings/environments/agents) | LiteLLM/provider keys, model routing, budgets | trusted workflows |
 
-Each environment has `INFRA_CONFIGURED=false` as a safety gate. Automation must not attempt to
-use real infrastructure until the required values are replaced and the gate is explicitly set to
-`true`.
+Each environment has a safety gate: `INFRA_CONFIGURED=false`, `NETWORK_CONFIGURED=false` or
+`AGENTS_CONFIGURED=false`. Automation must not attempt to use real infrastructure until the
+required values are replaced and the matching gate is explicitly set to `true`.
 
 See [GitHub environments](docs/github-environments.md) for every variable and secret name.
 
@@ -35,6 +35,7 @@ See [GitHub environments](docs/github-environments.md) for every variable and se
 - Non-secret desired state: [`config/platform.yaml`](config/platform.yaml)
 - LiteLLM gateway: [`services/litellm`](services/litellm)
 - Worker VM and Coolify: [worker VM runbook](docs/worker-vm.md)
+- Tailscale clients and ACL: [Tailscale setup](docs/tailscale.md)
 - Runners: [runner policy](docs/runners.md)
 - Shared R2 sccache: [cache configuration](docs/cache.md)
 - PolyCore task policy: [task schema](https://github.com/WCKDai/polycore/blob/main/agent/task.schema.json)

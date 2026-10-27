@@ -4,8 +4,9 @@ GitHub supports environments only at repository scope. Organization secrets/vari
 shared, but environment protection, reviewers and environment-specific secrets belong to a
 repository. `WCKDai/platform` is therefore the central environment store.
 
-All sensitive placeholders are currently `SET_ME`, and `INFRA_CONFIGURED=false`. Replace them in
-the environment UI; never put a credential in a variable.
+Sensitive placeholders are `SET_ME`. Gates are `INFRA_CONFIGURED=false`,
+`NETWORK_CONFIGURED=false` and `AGENTS_CONFIGURED=false`. Replace values in the environment UI;
+never put a credential in a variable.
 
 ## `infra`
 
@@ -38,18 +39,21 @@ Protected to the `main` branch.
 | Variable | Set to |
 |---|---|
 | `TAILSCALE_TAILNET` | e.g. `tailxxxx.ts.net` |
-| `TAILSCALE_HOSTNAME` | `polycore-worker` |
-| `TAILSCALE_TAGS` | `tag:polycore-ci,tag:polycore-gateway` |
-| `TAILSCALE_OAUTH_CLIENT_ID` | Tailscale OAuth client ID |
-| `TAILSCALE_OAUTH_CLIENT_SECRET` secret | OAuth client secret |
-| `TAILSCALE_AUTH_KEY` secret | Optional one-time key fallback; prefer OAuth |
+| `TAILSCALE_WORKER_CLIENT_ID` | Persistent worker OAuth client ID |
+| `TAILSCALE_WORKER_CLIENT_SECRET` secret | Persistent worker OAuth secret |
+| `TAILSCALE_WORKER_TAGS` | `tag:polycore-gateway` |
+| `TAILSCALE_WORKER_HOSTNAME` | `polycore-worker` |
+| `TAILSCALE_CI_CLIENT_ID` | Ephemeral CI OAuth client ID |
+| `TAILSCALE_CI_CLIENT_SECRET` secret | Ephemeral CI OAuth secret |
+| `TAILSCALE_CI_TAGS` | `tag:polycore-ci` |
 
-Recommended Tailscale policy:
+Use `${secret}` names in automation. See [tailscale.md](tailscale.md) for the two-client scopes,
+ACL and rotation policy.
 
-- tag the worker `tag:polycore-gateway`;
-- allow only WCKDai owners/devices and the trusted runner to reach LiteLLM/Temporal;
-- expose no LiteLLM, Temporal, Postgres or Redis port publicly;
-- use an ephemeral/tagged OAuth key for runner registration.
+- Tag the worker `tag:polycore-gateway`.
+- CI nodes are ephemeral and tagged `tag:polycore-ci`.
+- Allow only WCKDai admins/devices and the trusted runner to reach LiteLLM/Temporal.
+- Expose no LiteLLM, Temporal, Postgres or Redis port publicly.
 
 ## `agents`
 

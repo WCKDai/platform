@@ -40,8 +40,14 @@ worker:
   memory_gb: 64
   disk_gb: 360
   tailscale:
-    hostname: polycore-worker
-    tags: [tag:polycore-ci, tag:polycore-gateway]
+    tailnet_variable: TAILSCALE_TAILNET
+    worker_client_id_variable: TAILSCALE_WORKER_CLIENT_ID
+    worker_client_secret: TAILSCALE_WORKER_CLIENT_SECRET
+    worker_hostname_variable: TAILSCALE_WORKER_HOSTNAME
+    worker_tags: [tag:polycore-gateway]
+    ci_client_id_variable: TAILSCALE_CI_CLIENT_ID
+    ci_client_secret: TAILSCALE_CI_CLIENT_SECRET
+    ci_tags: [tag:polycore-ci]
   concurrency:
     agent_writers: 4
     verifiers: 2
