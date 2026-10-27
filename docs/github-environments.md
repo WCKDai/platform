@@ -33,7 +33,7 @@ Protected to the `main` branch.
 | `WORKER_MEMORY_GB` | actual RAM in GiB |
 | `WORKER_DISK_GB` | usable NVMe/SSD capacity |
 | `RUNNER_LABEL` | `rust-16`, adjusted to actual capacity |
-| `RUNNER_ADMIN_TOKEN` secret | Short-lived fine-grained token/app token for org runner registration |
+| `RUNNER_ADMIN_TOKEN` secret | Optional. Only for automated re-registration, as a classic PAT with `admin:org` and a short expiry. A one-time manual registration needs no stored token. |
 
 The server is already connected to Coolify. No cloud-provider provisioning token or SSH-key UUID
 is required.

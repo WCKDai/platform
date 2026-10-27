@@ -17,6 +17,10 @@ Minimum practical target:
 | OS | current supported Ubuntu LTS or Debian |
 | Swap | 4–8 GB emergency only |
 
+This host: Debian 13 (trixie), x86_64, **16 vCPU, 62.8 GiB RAM, 1 TB disk**. Those values are
+recorded in `WORKER_CPU_CORES`, `WORKER_MEMORY_GB` and `WORKER_DISK_GB`, so `RUNNER_LABEL=rust-16`
+is accurate. Do not raise the label on a smaller host.
+
 Record the actual values in `WORKER_CPU_CORES`, `WORKER_MEMORY_GB`, `WORKER_DISK_GB` and adjust
 `RUNNER_LABEL` accordingly. Do not label a smaller host `rust-16`.
 

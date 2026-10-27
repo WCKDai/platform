@@ -29,12 +29,26 @@ ephemeral macOS VM (Tart or equivalent) for untrusted code.
 
 ## Linux worker
 
-- Official GitHub runner or an ephemeral one-job container.
-- Systemd service for a simple trusted runner; auto-scaled ephemeral runners when concurrency
-  grows.
+Current host: Netcup, Debian 13 (trixie), x86_64, 16 vCPU, 62.8 GiB RAM, 1 TB disk,
+already attached to the Coolify control plane.
+
+- Official GitHub runner as a systemd service, registered once with a one-hour token:
+  [`scripts/install-runner.sh`](../scripts/install-runner.sh).
+- Runner group `trusted`, limited to `WCKDai/polycore` and `WCKDai/polykrom`.
 - Labels: `self-hosted`, `linux`, `x64`, `rust-16`, `trusted`.
 - Keep Rust toolchains, sccache, Docker and helper CLIs updated by a scheduled maintenance job.
 - No long-lived provider keys on disk. Environment-scoped values are injected per job.
+
+Order matters. A runner group that permits public repositories will run workflow code from any
+workflow the group allows, including a fork pull request. So:
+
+1. Merge the workflow that requests the runner into `main`.
+2. Set `allows_public_repositories=true` and `restricted_to_workflows=true` on the `trusted`
+   group, listing only `WCKDai/polycore/.github/workflows/ci.yml@refs/heads/main`.
+3. Only then register the runner.
+
+Until step 3 the group stays `allows_public_repositories=false` and no runner exists, so nothing
+can reach the host.
 
 ## Queueing and cost
 
