@@ -170,6 +170,37 @@ jobs:
         if: always()
         run: sudo tailscale logout || true
 
+  gateway:
+    name: Agent gateway
+    runs-on: ubuntu-latest
+    environment: infra
+    timeout-minutes: 10
+    steps:
+      - name: Check gate
+        if: vars.INFRA_CONFIGURED != 'true'
+        env:
+          OBSERVED: ${{ vars.INFRA_CONFIGURED }}
+        run: |
+          echo "observed INFRA_CONFIGURED='$OBSERVED'"
+          echo "::error::INFRA_CONFIGURED is not true; refusing to probe the gateway"
+          exit 1
+
+      - name: Probe LiteLLM
+        env:
+          LITELLM_MASTER_KEY: ${{ secrets.LITELLM_MASTER_KEY }}
+          GATEWAY: https://llm.polykrom.app
+        run: |
+          set -euo pipefail
+          [ -n "${LITELLM_MASTER_KEY:-}" ] || { echo "::error::LITELLM_MASTER_KEY is not set"; exit 1; }
+          echo "liveliness: $(curl -fsS --max-time 20 "$GATEWAY/health/liveliness")"
+          code="$(curl -sS -o /tmp/models -w '%{http_code}' --max-time 20 "$GATEWAY/v1/models")"
+          [ "$code" = "401" ] || { echo "::error::an unauthenticated /v1/models returned $code, expected 401"; exit 1; }
+          echo "unauthenticated /v1/models: 401"
+          models="$(curl -fsS --max-time 20 -H "Authorization: Bearer $LITELLM_MASTER_KEY" "$GATEWAY/v1/models" | jq -r '.data[].id')"
+          echo "models:"
+          while IFS= read -r model; do echo "  $model"; done <<<"$models"
+          [ -n "$models" ] || { echo "::error::the gateway returned no models"; exit 1; }
+
   infra:
     name: Coolify control plane
     runs-on: ubuntu-latest
