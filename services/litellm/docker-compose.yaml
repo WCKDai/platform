@@ -1,8 +1,8 @@
 # LiteLLM gateway for PolyCore/Polykrom agents.
 #
 # Every value comes from the Coolify application's environment; nothing secret is in this file.
-# `SERVICE_FQDN_LITELLM_4000` is Coolify's compose magic variable: it publishes the service on
-# that domain through the managed proxy.
+# The model list is embedded with Compose `configs.content` because Coolify copies only this
+# file to the deployment directory, so a sibling config.yaml bind mount would not exist.
 
 services:
   postgres:
@@ -25,13 +25,13 @@ services:
     command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?set in Coolify}", "--appendonly", "yes"]
     volumes:
       - litellm-redis:/data
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set in Coolify}
     healthcheck:
       test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
       interval: 5s
       timeout: 5s
       retries: 20
-    environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD:?set in Coolify}
     restart: unless-stopped
 
   litellm:
@@ -48,15 +48,58 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
-      SERVICE_FQDN_LITELLM_4000: ${LITELLM_DOMAIN:-llm.polykrom.app}
-    volumes:
-      - ./config.yaml:/app/config.yaml:ro
+    configs:
+      - source: litellm_config
+        target: /app/config.yaml
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
     restart: unless-stopped
+
+configs:
+  litellm_config:
+    content: |
+      # Logical model aliases. Verify provider model identifiers at deployment time.
+      model_list:
+        - model_name: cheap
+          litellm_params:
+            model: deepseek/deepseek-flash
+            api_key: os.environ/DEEPSEEK_API_KEY
+        - model_name: standard
+          litellm_params:
+            model: anthropic/claude-sonnet-5-5
+            api_key: os.environ/ANTHROPIC_API_KEY
+        - model_name: strong
+          litellm_params:
+            model: anthropic/claude-opus-5-5
+            api_key: os.environ/ANTHROPIC_API_KEY
+        - model_name: review
+          litellm_params:
+            model: openai/gpt-6.1-sol
+            api_key: os.environ/OPENAI_API_KEY
+        - model_name: long_context
+          litellm_params:
+            model: gemini/gemini-4-argon
+            api_key: os.environ/GEMINI_API_KEY
+
+      router_settings:
+        fallbacks:
+          - cheap: [standard]
+          - standard: [strong]
+          - strong: [review]
+        allowed_fails: 2
+        cooldown_time: 30
+
+      litellm_settings:
+        drop_params: true
+        request_timeout: 600
+        num_retries: 2
+
+      general_settings:
+        master_key: os.environ/LITELLM_MASTER_KEY
+        database_url: os.environ/DATABASE_URL
 
 volumes:
   litellm-postgres:
