@@ -94,6 +94,21 @@ Minimal private access policy:
 Narrow the ports as services become final. Do not expose LiteLLM, Temporal, Postgres or Redis to
 the public internet.
 
+## Troubleshooting
+
+`tailscale up` reports only the control-plane status, so a misconfigured client is hard to read
+from the action log. Run **Preflight** first; its `Tailscale CI client` job prints the scope that
+each OAuth client actually receives.
+
+| Symptom | Cause |
+|---|---|
+| Token endpoint `HTTP 200`, join ends with `Status: 404, Message: "not found"` | Client lacks the `auth_keys` scope |
+| Token endpoint `HTTP 401` / `invalid_client` | Client ID and secret do not belong together |
+| `requested tags [...] are invalid or not permitted` | `TAILSCALE_CI_TAGS` is not assigned to that client |
+
+The CI client must be `auth_keys` only. `devices:core` is a worker capability and must never be
+granted to the ephemeral CI client.
+
 ## Rotation
 
 - Rotate one client at a time.

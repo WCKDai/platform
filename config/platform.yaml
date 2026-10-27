@@ -50,12 +50,16 @@ worker:
     worker_client_secret: TAILSCALE_WORKER_CLIENT_SECRET
     worker_hostname_variable: TAILSCALE_WORKER_HOSTNAME
     worker_tags: [tag:polycore-gateway]
+    worker_scopes: [auth_keys, devices:core]
     ci_client_id_variable: TAILSCALE_CI_CLIENT_ID
     ci_client_secret: TAILSCALE_CI_CLIENT_SECRET
     ci_tags: [tag:polycore-ci]
+    ci_scopes: [auth_keys]
   concurrency:
-    agent_writers: 4
-    verifiers: 2
+    # Starting point for a 16 vCPU / 64 GB host; raise only after measuring
+    # load, cache-hit rate and queue time.
+    agent_writers: 2
+    verifiers: 1
     concurrent_ci_jobs: 1
 
 cache:
