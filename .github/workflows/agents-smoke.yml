@@ -1,0 +1,50 @@
+name: Agent smoke test
+
+# One real completion through the gateway. Run manually; it spends a few tokens.
+# `model` must be one of the aliases in services/litellm/docker-compose.yaml.
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: Model alias
+        required: true
+        default: cheap
+      prompt:
+        description: Prompt
+        required: true
+        default: "Reply with the single word: pong"
+
+permissions:
+  contents: read
+
+jobs:
+  complete:
+    name: Completion via LiteLLM
+    runs-on: ubuntu-latest
+    environment: infra
+    timeout-minutes: 10
+    steps:
+      - name: Call the gateway
+        env:
+          LITELLM_MASTER_KEY: ${{ secrets.LITELLM_MASTER_KEY }}
+          MODEL: ${{ inputs.model }}
+          PROMPT: ${{ inputs.prompt }}
+          GATEWAY: https://llm.polykrom.app
+        run: |
+          set -euo pipefail
+          [ -n "${LITELLM_MASTER_KEY:-}" ] || { echo "::error::LITELLM_MASTER_KEY is not set"; exit 1; }
+          body="$(jq -n --arg m "$MODEL" --arg p "$PROMPT" \
+            '{model:$m, messages:[{role:"user",content:$p}], max_tokens:32, temperature:0}')"
+          response="$(curl -sS -w '\n%{http_code}' --max-time 120 \
+            -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$body" "$GATEWAY/v1/chat/completions")"
+          code="$(tail -n 1 <<<"$response")"
+          payload="$(sed '$d' <<<"$response")"
+          echo "HTTP $code"
+          if [ "$code" != "200" ]; then
+            echo "::error::gateway returned $code: $(head -c 600 <<<"$payload")"
+            exit 1
+          fi
+          jq -r '.choices[0].message.content, "model: \(.model)", "usage: \(.usage.prompt_tokens)+\(.usage.completion_tokens) tokens"' <<<"$payload"
