@@ -175,15 +175,23 @@ jobs:
         run: |
           set -euo pipefail
           COOLIFY_URL="${COOLIFY_URL%/}"
-          curl -fsS --max-time 20 \
-            -H "Authorization: Bearer $COOLIFY_API_TOKEN" \
-            -H "Accept: application/json" \
-            "$COOLIFY_URL/api/v1/version"
-          echo
-          servers="$(curl -fsS --max-time 20 \
-            -H "Authorization: Bearer $COOLIFY_API_TOKEN" \
-            -H "Accept: application/json" \
-            "$COOLIFY_URL/api/v1/servers")"
+          call() {
+            local path="$1" response code body
+            response="$(curl -sS -w '\n%{http_code}' --max-time 20 \
+              -H "Authorization: Bearer $COOLIFY_API_TOKEN" \
+              -H "Accept: application/json" \
+              "$COOLIFY_URL$path")"
+            code="$(tail -n 1 <<<"$response")"
+            body="$(sed '$d' <<<"$response")"
+            if [ "$code" != "200" ]; then
+              echo "::error::$path returned HTTP $code: $body"
+              return 1
+            fi
+            printf '%s' "$body"
+          }
+
+          echo "version: $(call /api/v1/version)"
+          servers="$(call /api/v1/servers)"
           jq -e --arg uuid "$COOLIFY_SERVER_UUID" 'any(.[]?; .uuid == $uuid)' \
             <<<"$servers" >/dev/null
           echo "Coolify server $COOLIFY_SERVER_UUID is reachable"
