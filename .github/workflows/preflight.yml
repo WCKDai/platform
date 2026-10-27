@@ -22,7 +22,10 @@ jobs:
     steps:
       - name: Check gate
         if: vars.R2_CONFIGURED != 'true'
+        env:
+          OBSERVED: ${{ vars.R2_CONFIGURED }}
         run: |
+          echo "observed R2_CONFIGURED='$OBSERVED'"
           echo "::error::R2_CONFIGURED is not true; refusing to touch the cache bucket"
           exit 1
 
@@ -72,7 +75,10 @@ jobs:
     steps:
       - name: Check gate
         if: vars.NETWORK_CONFIGURED != 'true'
+        env:
+          OBSERVED: ${{ vars.NETWORK_CONFIGURED }}
         run: |
+          echo "observed NETWORK_CONFIGURED='$OBSERVED'"
           echo "::error::NETWORK_CONFIGURED is not true; refusing to join the tailnet"
           exit 1
 
@@ -172,7 +178,10 @@ jobs:
     steps:
       - name: Check gate
         if: vars.INFRA_CONFIGURED != 'true'
+        env:
+          OBSERVED: ${{ vars.INFRA_CONFIGURED }}
         run: |
+          echo "observed INFRA_CONFIGURED='$OBSERVED'"
           echo "::error::INFRA_CONFIGURED is not true; refusing to call Coolify"
           exit 1
 
