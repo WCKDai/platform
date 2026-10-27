@@ -76,25 +76,50 @@ jobs:
           echo "::error::NETWORK_CONFIGURED is not true; refusing to join the tailnet"
           exit 1
 
-      - name: Exchange the OAuth client for a token
+      - name: Check OAuth client scopes
         env:
-          TS_CLIENT_ID: ${{ vars.TAILSCALE_CI_CLIENT_ID }}
-          TS_CLIENT_SECRET: ${{ secrets.TAILSCALE_CI_CLIENT_SECRET }}
+          CI_ID: ${{ vars.TAILSCALE_CI_CLIENT_ID }}
+          CI_SECRET: ${{ secrets.TAILSCALE_CI_CLIENT_SECRET }}
+          WORKER_ID: ${{ vars.TAILSCALE_WORKER_CLIENT_ID }}
+          WORKER_SECRET: ${{ secrets.TAILSCALE_WORKER_CLIENT_SECRET }}
         run: |
           set -euo pipefail
-          response="$(curl -sS -w '\n%{http_code}' \
-            -u "$TS_CLIENT_ID:$TS_CLIENT_SECRET" \
-            -d grant_type=client_credentials \
-            https://api.tailscale.com/api/v2/oauth/token)"
-          code="$(tail -n 1 <<<"$response")"
-          body="$(sed '$d' <<<"$response")"
-          echo "token endpoint: HTTP $code"
-          if [ "$code" != "200" ]; then
-            echo "::error::OAuth client rejected: $body"
-            exit 1
-          fi
-          echo "scope: $(jq -r '.scope' <<<"$body")"
-          jq -e '.access_token != null and .access_token != ""' <<<"$body" >/dev/null
+          probe() {
+            local name="$1" id="$2" secret="$3" response code body scope
+            response="$(curl -sS -w '\n%{http_code}' \
+              -u "$id:$secret" \
+              -d grant_type=client_credentials \
+              https://api.tailscale.com/api/v2/oauth/token)"
+            code="$(tail -n 1 <<<"$response")"
+            body="$(sed '$d' <<<"$response")"
+            if [ "$code" != "200" ]; then
+              echo "::error::$name client rejected (HTTP $code): $body"
+              return 1
+            fi
+            scope="$(jq -r '.scope // ""' <<<"$body")"
+            echo "$name client scope: $scope"
+            PROBED_SCOPE="$scope"
+          }
+
+          PROBED_SCOPE=""
+          probe CI "$CI_ID" "$CI_SECRET"
+          ci_scope="$PROBED_SCOPE"
+
+          PROBED_SCOPE=""
+          probe WORKER "$WORKER_ID" "$WORKER_SECRET"
+          worker_scope="$PROBED_SCOPE"
+
+          case ",$ci_scope," in
+            *",auth_keys,"*) ;;
+            *)
+              echo "::error::CI client has [$ci_scope] but needs auth_keys to mint node keys"
+              exit 1
+              ;;
+          esac
+          case ",$worker_scope," in
+            *",auth_keys,"*) ;;
+            *) echo "::warning::worker client has [$worker_scope]; it also needs auth_keys" ;;
+          esac
 
       - name: Join the tailnet with the CI OAuth client
         uses: tailscale/github-action@99a8333667fff04fdd6cffb46dfd409f8329a7bf # v4.3.0
