@@ -88,8 +88,9 @@ model credentials unreadable.
 
 ## Shared R2
 
-After `gh auth refresh -h github.com -s admin:org`, the R2 values should be organization-level
-variables/secrets selected only for PolyCore, Polykrom and platform. R2 credentials are low
-privilege and cache-only; model provider keys are not placed in GitHub organization secrets.
+The R2 variables/secrets now exist at organization level, selected only for PolyCore, Polykrom
+and platform. R2 credentials are low privilege and cache-only; model provider keys are not placed
+in GitHub organization secrets. Replace the placeholders and set `R2_CONFIGURED=true` after
+verification. See [cache.md](cache.md).
 
 See [cache.md](cache.md).

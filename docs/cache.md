@@ -10,8 +10,9 @@
 
 ## GitHub organization configuration
 
-After `gh auth refresh -h github.com -s admin:org`, set organization variables selected for
-PolyCore, Polykrom and platform:
+Organization variables are configured and selected for PolyCore, Polykrom and platform:
+
+https://github.com/organizations/WCKDai/settings/actions/variables
 
 ```text
 R2_CONFIGURED=false  # set true only after verification
@@ -21,14 +22,18 @@ SCCACHE_REGION=auto
 SCCACHE_S3_USE_SSL=true
 ```
 
-Organization secrets:
+Placeholder organization secrets exist at:
+
+https://github.com/organizations/WCKDai/settings/actions/secrets
 
 ```text
 R2_ACCESS_KEY_ID
 R2_SECRET_ACCESS_KEY
 ```
 
-Repository variable:
+Replace their placeholder values.
+
+Repository variables:
 
 ```text
 PolyCore: SCCACHE_S3_KEY_PREFIX=polycore

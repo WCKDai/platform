@@ -62,11 +62,11 @@ GitHub WCKDai
 
 ## Immediate setup checklist
 
-1. Run `gh auth refresh -h github.com -s admin:org`.
+1. ✅ Organizations, repositories, control environments and organization R2/agent slots exist.
 2. Replace the `SET_ME` variables in `infra` and `network`.
-3. Replace the dummy secrets in `infra`, `network` and `agents` through the environment settings.
+3. Replace the placeholder secrets in `infra`, `network` and `agents` through the environment settings.
 4. Create one private R2 cache bucket and a bucket-scoped read/write token.
-5. Add the R2 token as organization secrets selected for PolyCore and Polykrom.
+5. Replace the organization R2 placeholders and set `R2_CONFIGURED=true` after verification.
 6. Add the worker VM to Coolify and Tailscale.
 7. Register a trusted org runner labelled `rust-16`.
 8. Deploy LiteLLM, Temporal, and observability through Coolify.
