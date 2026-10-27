@@ -93,3 +93,17 @@ ci:
   macos: existing-apple-silicon
   gpu: nightly-only
   required_runner_label: rust-16
+
+# Keys the workflows read directly. Declared here so the audit can tell an unused secret from
+# one that only exists at runtime; the names live in GitHub environments, never the values.
+runtime_keys:
+  - COOLIFY_API_TOKEN
+  - COOLIFY_SERVER_UUID
+  - COOLIFY_URL
+  - INFRA_CONFIGURED
+  - NETWORK_CONFIGURED
+  - R2_ACCESS_KEY_ID
+  - R2_SECRET_ACCESS_KEY
+  - SCCACHE_REGION
+  - SCCACHE_S3_USE_SSL
+  - TAILSCALE_CI_TAGS
