@@ -128,11 +128,16 @@ panel and compose stack under `services/agent/` are the deployed start of that s
 stays the thing that makes it trustworthy.
 
 **Shipped in 0.0.23:** thread worktrees (a session, branch and worktree, with a tombstone after
-removal), thread diffs and one-click PRs (`gh`, the GitHub API with `GH_TOKEN`, or a compare link),
-and the panel's rooms for chat, workspaces, bots, integrations, usage and settings. The agent API
-now exposes threads, settings (a validated dotted key), model, tools, write-only connector token
-files and bot creation; the panel proxies only the routes it needs and still never sees a provider
-key. The stable event stream, adapter registry and delegated mode remain.
+removal), thread diffs and one-click PRs, and the panel's rooms for chat, workspaces, bots,
+integrations, usage and settings. The agent API now exposes threads, settings (a validated dotted
+key), model, tools, write-only connector token files and bot creation; the panel proxies only the
+routes it needs and still never sees a provider key.
+
+**Shipped in 0.0.24:** the versioned turn stream (`spec/agent.md`, Turn events): `turn.started`,
+text and reasoning deltas, tool starts and outputs, diffs and changes, usage, receipts, approval
+cards, the final answer and kept notes, all with `v: 1`. The panel renders the live text, diffs,
+tool output and approval cards instead of waiting for the answer. The adapter registry and
+delegated mode remain.
 
 **Deployed on 2026-10-28:** the alpha panel at
 [`agent.invincible.sh`](https://agent.invincible.sh) runs the gateway, Autobot and

@@ -429,3 +429,10 @@ input[type="password"]:focus { border-color: #526049; box-shadow: 0 0 0 3px rgba
   .row > * { flex: 1 1 140px; }
 }
 tbody tr.active td { background: rgba(201, 255, 99, 0.08); }
+.bubble.approval-card {
+  justify-self: stretch;
+  max-width: 100%;
+  border-color: #5a4a2b;
+  background: rgba(255, 196, 107, 0.06);
+}
+.bubble.approval-card .actions { margin-top: 9px; }

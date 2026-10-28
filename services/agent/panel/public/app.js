@@ -5,6 +5,7 @@ let csrf = "";
 let busy = false;
 let timer = 0;
 let selectedSession = "";
+let live = null;
 let threads = [];
 let bots = [];
 let settings = {};
@@ -186,10 +187,56 @@ function appendBubble(kind, content) {
   node.textContent = content;
   chat.append(node);
   chat.scrollTop = chat.scrollHeight;
+  return node;
+}
+
+function liveBubble() {
+  if (!live) live = appendBubble("assistant", "");
+  const chat = $("chat");
+  chat.scrollTop = chat.scrollHeight;
+  return live;
+}
+
+function appendDetails(summary, text, kind = "tool") {
+  const chat = $("chat");
+  if (chat.querySelector(".muted") && chat.children.length === 1) chat.innerHTML = "";
+  const node = document.createElement("details");
+  node.className = `bubble ${kind}`;
+  const title = document.createElement("summary");
+  title.textContent = summary;
+  const body = document.createElement("pre");
+  body.textContent = text;
+  node.append(title, body);
+  chat.append(node);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function appendApproval(event) {
+  live = null;
+  const chat = $("chat");
+  if (chat.querySelector(".muted") && chat.children.length === 1) chat.innerHTML = "";
+  const node = document.createElement("div");
+  node.className = "bubble approval-card";
+  const text = document.createElement("strong");
+  text.textContent = event.text || "Approval requested";
+  const actions = document.createElement("div");
+  actions.className = "actions";
+  for (const answer of ["once", "always", "deny"]) {
+    const button = document.createElement("button");
+    button.className = `mini ${answer === "deny" ? "no" : "yes"}`;
+    button.dataset.answer = answer;
+    button.dataset.id = event.id || "";
+    button.textContent = answer[0].toUpperCase() + answer.slice(1);
+    actions.append(button);
+  }
+  node.append(text, actions);
+  chat.append(node);
+  chat.scrollTop = chat.scrollHeight;
 }
 
 async function loadHistory(id) {
   selectedSession = id;
+  live = null;
   $("chat-session").value = id;
   $("chat-title").textContent = id;
   $("chat").innerHTML = `<p class="muted">Loading ${esc(id)}…</p>`;
@@ -205,13 +252,56 @@ async function loadHistory(id) {
 
 function handleStreamEvent(event) {
   if (!event) return;
-  if (event.type === "tool") appendBubble("tool", `› ${event.text || "tool"}`);
-  else if (event.type === "refused") appendBubble("note", `refused: ${event.text || ""}`);
+  if (event.type === "turn.started") {
+    setStatus("online", "working…");
+    return;
+  }
+  if (event.type === "text") {
+    liveBubble().textContent += event.delta || "";
+    $("chat").scrollTop = $("chat").scrollHeight;
+    return;
+  }
+  if (event.type === "reasoning") return;
+  if (event.type === "tool") {
+    live = null;
+    appendBubble("tool", `› ${event.text || "tool"}`);
+    return;
+  }
+  if (event.type === "tool_output") {
+    appendDetails(`tool output · ${event.name || "tool"}`, event.text || "");
+    return;
+  }
+  if (event.type === "diff") {
+    appendDetails("diff", event.text || "");
+    return;
+  }
+  if (event.type === "change") {
+    appendBubble("note", `changed ${event.path || "a file"} (${event.after_bytes ?? "?"} bytes)`);
+    return;
+  }
+  if (event.type === "usage") return;
+  if (event.type === "approval") {
+    appendApproval(event);
+    return;
+  }
+  if (event.type === "answer") {
+    if (live) {
+      live.textContent = event.text || live.textContent;
+      live = null;
+    } else {
+      appendBubble("assistant", event.text || "(no answer)");
+    }
+    return;
+  }
+  if (event.type === "error") {
+    live = null;
+    appendBubble("error", event.text || "error");
+    return;
+  }
+  if (event.type === "refused") appendBubble("note", `refused: ${event.text || ""}`);
   else if (event.type === "receipt") {
     appendBubble("receipt", `receipt ${String(event.id || "").slice(0, 8)}${event.model ? ` · ${event.model}` : ""}${event.tier ? ` · ${event.tier}` : ""}`);
-  } else if (event.type === "answer") appendBubble("assistant", event.text || "(no answer)");
-  else if (event.type === "error") appendBubble("error", event.text || "error");
-  else if (event.type === "member") appendBubble("note", `${event.agent || "member"}: ${event.text || ""}`);
+  } else if (event.type === "member") appendBubble("note", `${event.agent || "member"}: ${event.text || ""}`);
   else if (event.type === "kept") appendBubble("note", `kept: ${event.text || ""}`);
 }
 
@@ -225,6 +315,7 @@ async function runChat(event) {
   const button = $("chat-send");
   busy = true;
   button.disabled = true;
+  live = null;
   appendBubble("user", textValue);
   input.value = "";
   try {
@@ -268,6 +359,7 @@ async function runChat(event) {
     appendBubble("error", error.message || String(error));
   } finally {
     busy = false;
+    live = null;
     button.disabled = false;
     await refresh();
   }
@@ -275,6 +367,7 @@ async function runChat(event) {
 
 function newChat() {
   selectedSession = "";
+  live = null;
   $("chat-session").value = "";
   $("chat-title").textContent = "new conversation";
   $("chat").innerHTML = `<p class="muted">Pick a conversation, or start a new one.</p>`;
