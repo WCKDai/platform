@@ -16,6 +16,16 @@ jobs:
     name: Public packages
     runs-on: ubuntu-latest
     steps:
+      - name: List packages
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          echo "## org packages"
+          curl -sS --max-time 30 -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/orgs/WCKDai/packages?package_type=container&per_page=100" \
+            | jq 'if type == "array" then [.[] | {name, visibility, owner: .owner.login}] else . end' || true
+
       - name: Set visibility
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
