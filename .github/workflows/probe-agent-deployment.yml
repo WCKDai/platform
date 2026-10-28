@@ -32,7 +32,7 @@ jobs:
           echo "## first records"
           jq -c 'if type == "array" then .[0:5] | map(if type == "object" then {id, deployment_uuid, status, created_at, application_id, application_name} else . end) else . end' <<<"$deps" | head -c 4000
           echo
-          dep_uuid="$(jq -r 'if type == "array" then (map(select(type == "object" and .deployment_uuid != null)) | sort_by(.created_at // "") | last | .deployment_uuid // empty) elif type == "object" then (.deployment_uuid // empty) else empty end' <<<"$deps")"
+          dep_uuid="$(jq -r 'if type == "array" then . elif type == "object" and (.deployments | type) == "array" then .deployments else [] end | map(select(type == "object" and .deployment_uuid != null)) | sort_by(.created_at // "") | last | .deployment_uuid // empty' <<<"$deps")"
           echo "## deployment=$dep_uuid"
           if [ -n "$dep_uuid" ]; then
             curl -sS --max-time 30 "${auth[@]}" "$base/deployments/$dep_uuid" \
