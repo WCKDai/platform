@@ -99,13 +99,17 @@ jobs:
           fi
           case "$domain" in https://*) ;; *) domain="https://$domain" ;; esac
           echo "DOMAIN=$domain" >>"$GITHUB_ENV"
-          body="$(jq -n --arg d "$domain" '{docker_compose_domains:[{name:"panel",domain:$d}]}')"
-          response="$(curl -sS -w '\n%{http_code}' --max-time 30 -X PATCH \
-            -H "Authorization: Bearer $COOLIFY_API_TOKEN" -H "Content-Type: application/json" \
-            -d "$body" "${COOLIFY_URL%/}/api/v1/applications/$APP_UUID")"
-          code="$(tail -n 1 <<<"$response")"
-          payload="$(sed '$d' <<<"$response")"
-          echo "domain: HTTP $code $domain: $payload"
+          body="$(jq -n --arg d "$domain" '{docker_compose_domains:[{name:"gateway",domain:$d}]}')"
+          for attempt in 1 2 3 4 5; do
+            response="$(curl -sS -w '\n%{http_code}' --max-time 30 -X PATCH \
+              -H "Authorization: Bearer $COOLIFY_API_TOKEN" -H "Content-Type: application/json" \
+              -d "$body" "${COOLIFY_URL%/}/api/v1/applications/$APP_UUID")"
+            code="$(tail -n 1 <<<"$response")"
+            payload="$(sed '$d' <<<"$response")"
+            echo "domain attempt $attempt: HTTP $code $domain: $payload"
+            [ "$code" = "200" ] || [ "$code" = "201" ] && break
+            sleep 5
+          done
           [ "$code" = "200" ] || [ "$code" = "201" ] || exit 1
 
       - name: Write the application environment
