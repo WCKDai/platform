@@ -21,6 +21,8 @@ set -eu
 REPO="${REPO:-WCKDai/platform}"
 ENV="${ENV:-infra}"
 TITLE="${TITLE:-autobot-alpha}"
+ROTATE=0
+[ "${1:-}" = "--rotate" ] && ROTATE=1
 
 need() {
   command -v "$1" >/dev/null 2>&1 || { echo "missing $1" >&2; exit 1; }
@@ -28,19 +30,27 @@ need() {
 need gh
 
 if [ -n "${GH_TOKEN:-}" ]; then
-  printf '%s' "$GH_TOKEN" | gh secret set AGENT_GH_TOKEN -R "$REPO" --env "$ENV" --body -
+  printf '%s' "$GH_TOKEN" | gh secret set AGENT_GH_TOKEN -R "$REPO" --env "$ENV" --body-file -
   echo "set AGENT_GH_TOKEN; run the deploy workflow to apply it"
   exit 0
 fi
 
 secrets="$(gh secret list -R "$REPO" --env "$ENV" 2>/dev/null || true)"
-if printf '%s\n' "$secrets" | grep -q '^AGENT_GH_TOKEN'; then
-  echo "AGENT_GH_TOKEN is already configured; delete it to rotate"
+if [ "$ROTATE" = 0 ] && printf '%s\n' "$secrets" | grep -q '^AGENT_GH_TOKEN'; then
+  echo "AGENT_GH_TOKEN is already configured; delete it or use --rotate to change it"
   exit 0
 fi
-if printf '%s\n' "$secrets" | grep -q '^AGENT_GIT_SSH_KEY_B64'; then
-  echo "AGENT_GIT_SSH_KEY_B64 is already configured; delete it to rotate"
+if [ "$ROTATE" = 0 ] && printf '%s\n' "$secrets" | grep -q '^AGENT_GIT_SSH_KEY_B64'; then
+  echo "AGENT_GIT_SSH_KEY_B64 is already configured; delete it or use --rotate to change it"
   exit 0
+fi
+if [ "$ROTATE" = 1 ]; then
+  gh secret delete AGENT_GIT_SSH_KEY_B64 -R "$REPO" --env "$ENV" >/dev/null 2>&1 || true
+  old_id="$(gh api user/keys --jq ".[] | select(.title == \"$TITLE\") | .id")"
+  if [ -n "$old_id" ]; then
+    gh api -X DELETE "user/keys/$old_id" >/dev/null
+    echo "removed old account SSH key $old_id"
+  fi
 fi
 
 tmp="$(mktemp -d)"
@@ -58,7 +68,7 @@ if [ -z "$existing" ]; then
 fi
 key_id="$(gh api user/keys --jq ".[] | select(.title == \"$TITLE\") | .id")"
 key_b64="$(base64 < "$tmp/key" | tr -d '\n')"
-printf '%s' "$key_b64" | gh secret set AGENT_GIT_SSH_KEY_B64 -R "$REPO" --env "$ENV" --body -
+printf '%s' "$key_b64" | gh secret set AGENT_GIT_SSH_KEY_B64 -R "$REPO" --env "$ENV" --body-file -
 echo "set AGENT_GIT_SSH_KEY_B64; run the deploy workflow to apply it"
 echo
 echo "This key makes git push work; the panel returns the compare link for the PR."
