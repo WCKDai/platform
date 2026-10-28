@@ -22,7 +22,16 @@ jobs:
           OWNER: ${{ github.repository_owner }}
         run: |
           set -euo pipefail
+          echo "listing org packages:"
+          gh api "/orgs/$OWNER/packages?package_type=container" 2>&1 | head -c 2000 || true
+          echo
+          echo "listing user packages:"
+          gh api "/user/packages?package_type=container" 2>&1 | head -c 1000 || true
+          echo
           for package in wckd-invincible-gateway wckd-autobot wckd-agent-panel; do
+            echo "reading $package:"
+            gh api "/orgs/$OWNER/packages/container/$package" 2>&1 | head -c 500 || true
+            echo
             current="$(gh api "/orgs/$OWNER/packages/container/$package" --jq .visibility 2>/dev/null || echo missing)"
             if [ "$current" = "public" ]; then
               echo "$package: already public"
