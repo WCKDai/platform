@@ -30,7 +30,7 @@ need() {
 need gh
 
 if [ -n "${GH_TOKEN:-}" ]; then
-  printf '%s' "$GH_TOKEN" | gh secret set AGENT_GH_TOKEN -R "$REPO" --env "$ENV" --body-file -
+  printf 'AGENT_GH_TOKEN=%s\n' "$GH_TOKEN" | gh secret set -R "$REPO" --env "$ENV" -f -
   echo "set AGENT_GH_TOKEN; run the deploy workflow to apply it"
   exit 0
 fi
@@ -68,7 +68,7 @@ if [ -z "$existing" ]; then
 fi
 key_id="$(gh api user/keys --jq ".[] | select(.title == \"$TITLE\") | .id")"
 key_b64="$(base64 < "$tmp/key" | tr -d '\n')"
-printf '%s' "$key_b64" | gh secret set AGENT_GIT_SSH_KEY_B64 -R "$REPO" --env "$ENV" --body-file -
+printf 'AGENT_GIT_SSH_KEY_B64=%s\n' "$key_b64" | gh secret set -R "$REPO" --env "$ENV" -f -
 echo "set AGENT_GIT_SSH_KEY_B64; run the deploy workflow to apply it"
 echo
 echo "This key makes git push work; the panel returns the compare link for the PR."
