@@ -149,6 +149,10 @@ jobs:
             value="${!name}"
             [ -n "$value" ] && put_env "$name" "$value"
           done
+          # A token supersedes the SSH fallback: clear the old key from the app environment.
+          if [ -n "${GH_TOKEN:-}" ] && [ -z "${GIT_SSH_KEY_B64:-}" ]; then
+            put_env GIT_SSH_KEY_B64 ""
+          fi
 
       - name: Deploy
         env:
