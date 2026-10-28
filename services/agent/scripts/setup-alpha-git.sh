@@ -29,13 +29,23 @@ need() {
 }
 need gh
 
+secrets="$(gh secret list -R "$REPO" --env "$ENV" 2>/dev/null || true)"
+
 if [ -n "${GH_TOKEN:-}" ]; then
   printf 'AGENT_GH_TOKEN=%s\n' "$GH_TOKEN" | gh secret set -R "$REPO" --env "$ENV" -f -
+  # A token supersedes the SSH fallback: retire it (and its account key) so there is one
+  # credential, not two.
+  if printf '%s\n' "$secrets" | grep -q '^AGENT_GIT_SSH_KEY_B64'; then
+    gh secret delete AGENT_GIT_SSH_KEY_B64 -R "$REPO" --env "$ENV" >/dev/null 2>&1 || true
+    old_id="$(gh api user/keys --jq ".[] | select(.title == \"$TITLE\") | .id")"
+    if [ -n "$old_id" ]; then
+      gh api -X DELETE "user/keys/$old_id" >/dev/null
+      echo "removed the fallback account SSH key $old_id"
+    fi
+  fi
   echo "set AGENT_GH_TOKEN; run the deploy workflow to apply it"
   exit 0
 fi
-
-secrets="$(gh secret list -R "$REPO" --env "$ENV" 2>/dev/null || true)"
 if [ "$ROTATE" = 0 ] && printf '%s\n' "$secrets" | grep -q '^AGENT_GH_TOKEN'; then
   echo "AGENT_GH_TOKEN is already configured; delete it or use --rotate to change it"
   exit 0
