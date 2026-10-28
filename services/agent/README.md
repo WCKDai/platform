@@ -37,7 +37,7 @@ cp .env.example .env
 panel/scripts/hash-password.mjs 'a long operator password'
 # put the printed scrypt:... in PANEL_PASSWORD_HASH
 
-scripts/fetch-linux-binaries.sh v0.0.23 x86_64
+scripts/fetch-linux-binaries.sh v0.0.24 x86_64
 docker compose config
 docker compose up -d --build
 docker compose ps
@@ -184,10 +184,10 @@ the host, run `docker compose up -d --build` with `images/autobot/bin/autobot` p
   design: the gateway runs in its own container and the models come from LiteLLM.
 - A first task from the panel, then `docker compose logs -f agent panel caddy`.
 
-The 0.0.23 alpha stack is deployed through Coolify at
+The 0.0.24 alpha stack is deployed through Coolify at
 `https://agent.invincible.sh` and was verified on 2026-10-28:
 
-- all three containers healthy (`gateway`, `agent`, `panel`); both binaries report `0.0.23`;
+- all three containers healthy (`gateway`, `agent`, `panel`); both binaries report `0.0.24`;
 - Let's Encrypt on the origin and a Cloudflare edge certificate on the public name;
 - login 303, dashboard and `/api/overview` 200, a missing CSRF token 403, logout 200;
 - the panel's rooms load: Overview, Chat, Workspaces, Bots, Integrations, Usage and Settings;

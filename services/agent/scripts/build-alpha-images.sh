@@ -11,7 +11,7 @@
 set -eu
 
 HOST="${ALPHA_HOST:?set ALPHA_HOST, for example root@62.83.75.115}"
-VERSION="${VERSION:-v0.0.23}"
+VERSION="${VERSION:-v0.0.24}"
 REGISTRY="${REGISTRY:-127.0.0.1:5000}"
 SRC="${SRC:-/opt/wckd-agent-src}"
 
