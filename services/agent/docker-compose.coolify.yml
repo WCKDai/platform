@@ -77,12 +77,10 @@ services:
       PANEL_BIND: 0.0.0.0
       GATEWAY_URL: http://127.0.0.1:7777/v1
       AGENT_URL: http://127.0.0.1:7792
-      INVINCIBLE_TOKEN_FILE: /invincible/token
+      INVINCIBLE_TOKEN: ${SERVICE_PASSWORD_64_INVINCIBLE}
       PANEL_PASSWORD: ${SERVICE_PASSWORD_64_PANEL}
       PANEL_SECRET: ${SERVICE_PASSWORD_64_SECRET}
       PANEL_SECURE_COOKIES: "true"
-    volumes:
-      - gateway-data:/invincible:ro
     depends_on:
       agent:
         condition: service_healthy
