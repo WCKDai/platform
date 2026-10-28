@@ -71,7 +71,7 @@ jobs:
         run: |
           set -euo pipefail
           owner="$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')"
-          scripts/fetch-linux-binaries.sh v0.0.22 x86_64
+          scripts/fetch-linux-binaries.sh v0.0.23 x86_64
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
           docker build -t "ghcr.io/$owner/wckd-autobot:${{ github.sha }}" -t "ghcr.io/$owner/wckd-autobot:latest" images/autobot
           docker build -t "ghcr.io/$owner/wckd-agent-panel:${{ github.sha }}" -t "ghcr.io/$owner/wckd-agent-panel:latest" panel

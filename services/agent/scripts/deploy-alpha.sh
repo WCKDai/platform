@@ -16,7 +16,7 @@ cd "$ROOT"
 
 if [ ! -x images/autobot/bin/autobot ]; then
   echo "images/autobot/bin/autobot is missing; running fetch-linux-binaries.sh"
-  scripts/fetch-linux-binaries.sh "${VERSION:-v0.0.22}" "$(uname -m)"
+  scripts/fetch-linux-binaries.sh "${VERSION:-v0.0.23}" "$(uname -m)"
 fi
 
 SSH="ssh -o BatchMode=yes -o ConnectTimeout=10 -p $ALPHA_PORT"

@@ -37,7 +37,7 @@ cp .env.example .env
 panel/scripts/hash-password.mjs 'a long operator password'
 # put the printed scrypt:... in PANEL_PASSWORD_HASH
 
-scripts/fetch-linux-binaries.sh v0.0.22 x86_64
+scripts/fetch-linux-binaries.sh v0.0.23 x86_64
 docker compose config
 docker compose up -d --build
 docker compose ps

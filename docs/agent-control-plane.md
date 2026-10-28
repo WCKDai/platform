@@ -127,6 +127,13 @@ The first three are the difference between "an agent in a terminal" and "a contr
 panel and compose stack under `services/agent/` are the deployed start of that surface; the gateway
 stays the thing that makes it trustworthy.
 
+**Shipped in 0.0.23:** thread worktrees (a session, branch and worktree, with a tombstone after
+removal), thread diffs and one-click PRs (`gh`, the GitHub API with `GH_TOKEN`, or a compare link),
+and the panel's rooms for chat, workspaces, bots, integrations, usage and settings. The agent API
+now exposes threads, settings (a validated dotted key), model, tools, write-only connector token
+files and bot creation; the panel proxies only the routes it needs and still never sees a provider
+key. The stable event stream, adapter registry and delegated mode remain.
+
 **Deployed on 2026-10-28:** the alpha panel at
 [`agent.invincible.sh`](https://agent.invincible.sh) runs the gateway, Autobot and
 panel together in the PolyCore Coolify project. All three are healthy; login, CSRF, overview,
