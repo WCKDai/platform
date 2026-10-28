@@ -8,6 +8,7 @@ set -eu
 : "${GATEWAY_MODEL:=auto}"
 : "${GATEWAY_PRIVATE:=false}"
 : "${APPROVALS_MODE:=auto}"
+: "${AGENT_SANDBOX:=off}"
 : "${AGENT_WORKDIR:=/workspace}"
 
 mkdir -p "$AUTOBOT_HOME" "$AGENT_WORKDIR"
@@ -15,6 +16,7 @@ mkdir -p "$AUTOBOT_HOME" "$AGENT_WORKDIR"
 cat > "$AUTOBOT_HOME/config.toml" <<EOF
 [agent]
 workdir = "$AGENT_WORKDIR"
+sandbox = "$AGENT_SANDBOX"
 
 [gateway]
 url = "$GATEWAY_URL"

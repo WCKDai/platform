@@ -64,6 +64,12 @@ The agent runs with `APPROVALS_MODE=auto` by default: interactive coding can edi
 while scheduled/board work still downgrades to `allowlist`. Set `APPROVALS_MODE=edits` or
 `allowlist` for a tighter default.
 
+The container config sets `[agent] sandbox = "off"`: a normal Docker container cannot create the
+user and mount namespaces `bwrap` needs (it fails with `Operation not permitted`), so the container
+is the boundary. Unattended commands therefore run inside the agent container, not in a second
+sandbox. Run Autobot directly on the host, or give the container the privileges bwrap needs, if you
+want the inner sandbox as well. For a throwaway container this is the intended trade.
+
 ## API and panel
 
 The Autobot API is not published beyond the host: it binds `127.0.0.1:7792` in the host's network
