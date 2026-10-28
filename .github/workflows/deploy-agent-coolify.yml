@@ -121,12 +121,15 @@ jobs:
           CLOUD_MODEL: ${{ vars.AGENT_CLOUD_MODEL || 'cheap' }}
           CLOUD_API_KEY: ${{ secrets.LITELLM_MASTER_KEY }}
           CLOUD_CONTEXT: ${{ vars.AGENT_CLOUD_CONTEXT || '65536' }}
+          GH_TOKEN: ${{ secrets.AGENT_GH_TOKEN }}
+          GIT_SSH_KEY_B64: ${{ secrets.AGENT_GIT_SSH_KEY_B64 }}
         run: |
           set -euo pipefail
           [ -n "$CLOUD_API_KEY" ] || { echo "::error::LITELLM_MASTER_KEY is not set in infra"; exit 1; }
           base="${COOLIFY_URL%/}/api/v1"
-          for name in CLOUD_BASE_URL CLOUD_MODEL CLOUD_API_KEY CLOUD_CONTEXT; do
-            value="${!name}"
+          put_env() {
+            name="$1"
+            value="$2"
             body="$(jq -n --arg k "$name" --arg v "$value" '{data:[{key:$k,value:$v}]}')"
             code="$(curl -sS -o /tmp/out -w '%{http_code}' --max-time 30 -X PATCH \
               -H "Authorization: Bearer $COOLIFY_API_TOKEN" -H "Content-Type: application/json" \
@@ -136,6 +139,15 @@ jobs:
               exit 1
             fi
             echo "set $name"
+          }
+          for name in CLOUD_BASE_URL CLOUD_MODEL CLOUD_API_KEY CLOUD_CONTEXT; do
+            put_env "$name" "${!name}"
+          done
+          # Optional GitHub credentials: a fine-grained token (preferred) or an account SSH key.
+          # They are only written when the corresponding secret exists; a redeploy keeps them.
+          for name in GH_TOKEN GIT_SSH_KEY_B64; do
+            value="${!name}"
+            [ -n "$value" ] && put_env "$name" "$value"
           done
 
       - name: Deploy

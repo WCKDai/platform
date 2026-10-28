@@ -86,6 +86,31 @@ git repository. `thread pr` commits, pushes and opens a pull request with `gh` o
 (`GH_TOKEN`/`GITHUB_TOKEN`), or returns the compare link after the push. The panel's **Workspaces**
 room does the same with clicks. The agent container is the boundary; see the sandbox note above.
 
+## GitHub credentials for thread PRs
+
+`thread pr` commits and pushes a branch, then opens a pull request. Without a credential the push
+fails. The preferred credential is a **fine-grained personal access token** with `Contents: write`
+and `Pull requests: write` on the project repository. Set it with the idempotent helper:
+
+```sh
+GH_TOKEN=github_pat_… ./scripts/setup-alpha-git.sh
+gh workflow run deploy-agent-coolify.yml -R WCKDai/platform --ref main
+```
+
+The script writes `AGENT_GH_TOKEN` in the `infra` environment; the deploy workflow puts it in the
+Coolify application as `GH_TOKEN`. Autobot uses it for the HTTPS push and the GitHub API, so the
+panel's **PR** button opens the pull request itself. The token reaches only the agent container;
+the browser and the panel never see it.
+
+Without a token, `./scripts/setup-alpha-git.sh` generates an **account SSH key** and stores it as
+`AGENT_GIT_SSH_KEY_B64`. The push then works over SSH, but the panel can only return the compare
+link (the GitHub API needs a token). The account key can push to any repository the account can
+write to; the script prints the revocation commands. Repeat runs change nothing while either
+secret exists; delete the secret (and the key) to rotate.
+
+The token is not a model provider key: provider keys still live in the gateway. It is a repository
+credential, so use a fine-grained token scoped to the project and the two permissions above.
+
 ## Deploy through Coolify (the alpha path)
 
 The platform's `infra` environment holds the Coolify server and project variables for PolyCore and

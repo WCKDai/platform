@@ -30,6 +30,7 @@ services:
       APPROVALS_MODE: ${APPROVALS_MODE:-auto}
       AGENT_WORKDIR: /workspace
       GH_TOKEN: ${GH_TOKEN:-}
+      GIT_SSH_KEY_B64: ${GIT_SSH_KEY_B64:-}
     volumes:
       - agent-data:/data
       - ${INVINCIBLE_DATA:-./data/invincible}:/invincible:ro

@@ -12,6 +12,16 @@ set -eu
 : "${AGENT_WORKDIR:=/workspace}"
 
 mkdir -p "$AUTOBOT_HOME" "$AGENT_WORKDIR"
+: "${HOME:=/root}"
+# A fine-grained GitHub token (GH_TOKEN) is used by git and the GitHub API directly. Without
+# one, an account SSH key makes the push work; the panel then returns the compare link.
+if [ -z "${GH_TOKEN:-}" ] && [ -n "${GIT_SSH_KEY_B64:-}" ]; then
+  mkdir -p "$HOME/.ssh"
+  printf '%s' "$GIT_SSH_KEY_B64" | base64 -d > "$HOME/.ssh/id_ed25519"
+  chmod 600 "$HOME/.ssh/id_ed25519"
+  git config --global url."git@github.com:".insteadOf "https://github.com/"
+  export GIT_SSH_COMMAND="ssh -i $HOME/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+fi
 
 cat > "$AUTOBOT_HOME/config.toml" <<EOF
 [agent]
