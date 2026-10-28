@@ -2,7 +2,7 @@
 // No dependencies beyond Node 20+; all upstream credentials stay on this process.
 
 import http from "node:http";
-import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -97,26 +97,37 @@ function cookies(request) {
   );
 }
 
+function sign(id) {
+  return createHmac("sha256", SECRET).update(id).digest("base64url");
+}
+
 function current(request) {
-  const token = cookies(request).panel_session;
-  const session = token ? sessions.get(token) : null;
+  const cookie = cookies(request).panel_session;
+  if (!cookie) return null;
+  const at = cookie.lastIndexOf(".");
+  if (at < 1) return null;
+  const id = cookie.slice(0, at);
+  const given = Buffer.from(cookie.slice(at + 1));
+  const expected = Buffer.from(sign(id));
+  if (given.length !== expected.length || !timingSafeEqual(given, expected)) return null;
+  const session = sessions.get(id);
   if (!session) return null;
   if (session.expires < Date.now()) {
-    sessions.delete(token);
+    sessions.delete(id);
     return null;
   }
   session.expires = Date.now() + SESSION_MS;
-  return { token, ...session };
+  return { token: id, ...session };
 }
 
 function startSession(res) {
-  const token = randomBytes(32).toString("base64url");
+  const id = randomBytes(32).toString("base64url");
   const csrf = randomBytes(24).toString("base64url");
-  sessions.set(token, { csrf, expires: Date.now() + SESSION_MS });
+  sessions.set(id, { csrf, expires: Date.now() + SESSION_MS });
   securityHeaders(res);
   res.setHeader(
     "Set-Cookie",
-    `panel_session=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${SESSION_MS / 1000}${SECURE ? "; Secure" : ""}`,
+    `panel_session=${id}.${sign(id)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${SESSION_MS / 1000}${SECURE ? "; Secure" : ""}`,
   );
   return csrf;
 }
