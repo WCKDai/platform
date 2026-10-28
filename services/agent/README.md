@@ -62,8 +62,7 @@ needs; it never exposes `/v1/agent` directly and never returns the gateway token
 ## Deploying to the alpha host
 
 There is no usable `alpha` SSH alias, DNS record, or Hetzner API token on the development machine
-as of 2026-10-28. The two reachable Hetzner hosts are the MinAltan rclone nodes, not a CI target.
-Do not repurpose them.
+as of 2026-10-28. Do not repurpose an unrelated host: name the target explicitly first.
 
 Once the host is named, use either:
 
