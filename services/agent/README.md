@@ -92,6 +92,20 @@ application's **Environment** tab. The default public URL is
 `https://agent.<server-ip>.sslip.io`; pass the optional `domain` input to use a real domain.
 The workflow waits for `running:healthy` and then checks `/healthz`.
 
+The GHCR packages built by `agent-stack.yml` are private, and the Coolify worker has no registry
+credential. The Coolify compose therefore pulls from a small registry on the host's loopback,
+populated by:
+
+```sh
+ALPHA_HOST=root@62.83.75.115 ./scripts/build-alpha-images.sh
+```
+
+That clones `main` to `/opt/wckd-agent-src`, builds the gateway, agent and panel images, and
+pushes them to `127.0.0.1:5000`. Run it before deploying after a change to `services/agent` (or
+after a new release), then run the `deploy-agent-coolify` workflow. When the GHCR packages are
+public, set `GATEWAY_IMAGE`, `AUTOBOT_IMAGE` and `PANEL_IMAGE` in the Coolify application to those
+images and the local registry is no longer needed.
+
 This uses LiteLLM for model access, so it proves the agent + gateway + panel path without a GPU on
 the worker. To use a local model later, replace the cloud block in the gateway service with an
 engine-bearing image; the agent and panel do not change.

@@ -1,4 +1,9 @@
 # Coolify deployment: Invincible (cloud models through LiteLLM), Autobot and the panel.
+#
+# The images come from the alpha host's local registry (127.0.0.1:5000). The GHCR packages are
+# private and the Coolify worker has no registry credential, so `scripts/build-alpha-images.sh`
+# builds the three images on the host and pushes them there. Point GATEWAY_IMAGE, AUTOBOT_IMAGE
+# and PANEL_IMAGE at public images when the packages are public.
 # Coolify's Traefik terminates TLS; there is no Caddy here. The panel is the public one.
 #
 # Invincible and Autobot only listen on loopback by design (paired devices reach the agent
@@ -17,7 +22,7 @@ name: wckd-agent-coolify
 
 services:
   gateway:
-    image: ${GATEWAY_IMAGE:-ghcr.io/wckdai/wckd-invincible-gateway:latest}
+    image: ${GATEWAY_IMAGE:-127.0.0.1:5000/wckd-invincible-gateway:latest}
     restart: unless-stopped
     environment:
       INVINCIBLE_HOME: /data
@@ -38,7 +43,7 @@ services:
       start_period: 10s
 
   agent:
-    image: ${AUTOBOT_IMAGE:-ghcr.io/wckdai/wckd-autobot:latest}
+    image: ${AUTOBOT_IMAGE:-127.0.0.1:5000/wckd-autobot:latest}
     restart: unless-stopped
     network_mode: "service:gateway"
     environment:
@@ -64,7 +69,7 @@ services:
       start_period: 10s
 
   panel:
-    image: ${PANEL_IMAGE:-ghcr.io/wckdai/wckd-agent-panel:latest}
+    image: ${PANEL_IMAGE:-127.0.0.1:5000/wckd-agent-panel:latest}
     restart: unless-stopped
     network_mode: "service:gateway"
     environment:
