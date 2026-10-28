@@ -156,18 +156,36 @@ jobs:
           COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
         run: |
           set -euo pipefail
+          base="${COOLIFY_URL%/}/api/v1"
+          auth=(-H "Authorization: Bearer $COOLIFY_API_TOKEN" -H "Accept: application/json")
+          exited=0
           for i in $(seq 1 90); do
-            status="$(curl -fsS --max-time 30 \
-              -H "Authorization: Bearer $COOLIFY_API_TOKEN" -H "Accept: application/json" \
-              "${COOLIFY_URL%/}/api/v1/applications/$APP_UUID" | jq -r '.status // "unknown"')"
-            echo "attempt $i: $status"
-            [ "$status" = "running:healthy" ] && exit 0
+            deps="$(curl -fsS --max-time 30 "${auth[@]}" \
+              "$base/deployments/applications/$APP_UUID?take=5" || echo '[]')"
+            latest="$(jq -c '(.data // .) | map(select(.deployment_uuid != null)) | sort_by(.created_at) | last // {}' <<<"$deps")"
+            dep_status="$(jq -r '.status // "none"' <<<"$latest")"
+            dep_uuid="$(jq -r '.deployment_uuid // empty' <<<"$latest")"
+            app="$(curl -fsS --max-time 30 "${auth[@]}" "$base/applications/$APP_UUID")"
+            status="$(jq -r '.status // "unknown"' <<<"$app")"
+            echo "attempt $i: deployment=$dep_status ($dep_uuid) application=$status"
+            if [ "$dep_status" = "failed" ] || [ "$dep_status" = "cancelled" ]; then
+              echo "::error::the deployment $dep_status"
+              exit 1
+            fi
+            if [ "$status" = "running:healthy" ]; then exit 0; fi
+            if [ "$dep_status" = "finished" ] && [ "$status" != "running:healthy" ]; then
+              exited=$((exited + 1))
+              if [ "$exited" -ge 3 ]; then
+                echo "::error::the deployment finished but the application is $status"
+                exit 1
+              fi
+            fi
             sleep 10
           done
           echo "::error::timed out waiting for the application"
           exit 1
 
-      - name: Collect service logs
+      - name: Collect deployment logs
         if: failure()
         env:
           COOLIFY_URL: ${{ vars.COOLIFY_URL }}
@@ -175,15 +193,21 @@ jobs:
         run: |
           set -uo pipefail
           [ -n "${APP_UUID:-}" ] || exit 0
-          for svc in gateway agent panel; do
-            echo "## $svc"
-            curl -sS --max-time 30 \
-              -H "Authorization: Bearer $COOLIFY_API_TOKEN" -H "Accept: application/json" \
-              "${COOLIFY_URL%/}/api/v1/applications/$APP_UUID/logs?lines=40&service_name=$svc" \
+          base="${COOLIFY_URL%/}/api/v1"
+          auth=(-H "Authorization: Bearer $COOLIFY_API_TOKEN" -H "Accept: application/json")
+          echo "## application"
+          curl -sS --max-time 30 "${auth[@]}" "$base/applications/$APP_UUID" \
+            | jq '{status, fqdn, docker_compose_domains, ports_exposes, build_pack, updated_at}' || true
+          deps="$(curl -sS --max-time 30 "${auth[@]}" "$base/deployments/applications/$APP_UUID?take=3" || echo '[]')"
+          latest="$(jq -c '(.data // .) | map(select(.deployment_uuid != null)) | sort_by(.created_at) | last // {}' <<<"$deps")"
+          dep_uuid="$(jq -r '.deployment_uuid // empty' <<<"$latest")"
+          echo "## deployment $dep_uuid"
+          if [ -n "$dep_uuid" ]; then
+            curl -sS --max-time 30 "${auth[@]}" "$base/deployments/$dep_uuid" \
               | jq -r '.logs // .message // empty' \
               | sed -E 's/[A-Za-z0-9_\/+=-]{40,}/***/g' \
-              | tail -40
-          done
+              | tail -120
+          fi
 
       - name: Health
         env:
