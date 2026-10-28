@@ -79,7 +79,7 @@ function renderGateway(gateway) {
   $("gateway-state").textContent = ok ? "online" : "offline";
   $("gateway-state").className = `badge${ok ? "" : " bad"}`;
   $("gateway-node").textContent = ok
-    ? `${node.name || "node"} · network ${node.network || "?"} · egress ${node.egress || "?"}`
+    ? `${node.name || "node"} · ${models.length} model(s) · ${(node.speech || []).length} speech · ${(node.images || []).length} image`
     : "The gateway did not answer.";
   $("models").innerHTML = models.length
     ? models
@@ -101,7 +101,7 @@ function renderAgent(agent) {
   $("stat-waiting").textContent = stats.waiting ?? "—";
   $("agent-info").textContent = unavailable(agent?.info)
     ? "The agent did not answer."
-    : `autobot ${info.version || "?"} · ${info.bots?.length || 0} bot(s) · ${info.model || "auto"}`;
+    : `${info.name || "Autobot"} · ${info.bots?.length || 0} bot(s) · ${info.model || "auto"}`;
 }
 
 function renderToday(agent) {
