@@ -99,7 +99,7 @@ jobs:
           fi
           case "$domain" in https://*) ;; *) domain="https://$domain" ;; esac
           echo "DOMAIN=$domain" >>"$GITHUB_ENV"
-          body="$(jq -n --arg d "$domain" '{docker_compose_domains:[{name:"gateway",domain:$d}]}')"
+          body="$(jq -n --arg d "$domain" '{docker_compose_domains:[{name:"gateway",domain:$d}], ports_exposes:"7800"}')"
           for attempt in 1 2 3 4 5; do
             response="$(curl -sS -w '\n%{http_code}' --max-time 30 -X PATCH \
               -H "Authorization: Bearer $COOLIFY_API_TOKEN" -H "Content-Type: application/json" \
@@ -162,7 +162,7 @@ jobs:
           for i in $(seq 1 90); do
             deps="$(curl -fsS --max-time 30 "${auth[@]}" \
               "$base/deployments/applications/$APP_UUID?take=5" || echo '[]')"
-            latest="$(jq -c '(.data // .) | map(select(.deployment_uuid != null)) | sort_by(.created_at) | last // {}' <<<"$deps")"
+            latest="$(jq -c 'if type == "array" then . elif (type == "object" and (.deployments | type) == "array") then .deployments else [] end | map(select(type == "object" and .deployment_uuid != null)) | sort_by(.created_at // "") | last // {}' <<<"$deps")"
             dep_status="$(jq -r '.status // "none"' <<<"$latest")"
             dep_uuid="$(jq -r '.deployment_uuid // empty' <<<"$latest")"
             app="$(curl -fsS --max-time 30 "${auth[@]}" "$base/applications/$APP_UUID")"
@@ -199,7 +199,7 @@ jobs:
           curl -sS --max-time 30 "${auth[@]}" "$base/applications/$APP_UUID" \
             | jq '{status, fqdn, docker_compose_domains, ports_exposes, build_pack, updated_at}' || true
           deps="$(curl -sS --max-time 30 "${auth[@]}" "$base/deployments/applications/$APP_UUID?take=3" || echo '[]')"
-          latest="$(jq -c '(.data // .) | map(select(.deployment_uuid != null)) | sort_by(.created_at) | last // {}' <<<"$deps")"
+          latest="$(jq -c 'if type == "array" then . elif (type == "object" and (.deployments | type) == "array") then .deployments else [] end | map(select(type == "object" and .deployment_uuid != null)) | sort_by(.created_at // "") | last // {}' <<<"$deps")"
           dep_uuid="$(jq -r '.deployment_uuid // empty' <<<"$latest")"
           echo "## deployment $dep_uuid"
           if [ -n "$dep_uuid" ]; then
