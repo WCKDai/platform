@@ -139,7 +139,9 @@ the host, run `docker compose up -d --build` with `images/autobot/bin/autobot` p
 - `docker compose config` — required values and network wiring.
 - `panel` local smoke test — login, overview, CSRF, logout, bad password, 401s.
 - `curl https://$PANEL_DOMAIN/healthz` — after deploy.
-- `autobot doctor` through the agent container — model, sandbox and gateway.
+- `autobot doctor` through the agent container — gateway, a model answer, tools and the
+  `sandbox = "off"` mode. The host-only `invincible` and `llama-server` checks are absent by
+  design: the gateway runs in its own container and the models come from LiteLLM.
 - A first task from the panel, then `docker compose logs -f agent panel caddy`.
 
 The alpha stack is deployed through Coolify at
