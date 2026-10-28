@@ -1,0 +1,36 @@
+name: Publish packages
+
+# GHCR packages this repository publishes (wckd-invincible-gateway, wckd-autobot,
+# wckd-agent-panel) must be pullable by hosts that have no GitHub credential. This makes them
+# public; it is idempotent. Run after the first agent-stack publish, or whenever a new package
+# appears. The workflow token has `packages: write` for packages this repository owns.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  public:
+    name: Make GHCR packages public
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set visibility
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          for package in wckd-invincible-gateway wckd-autobot wckd-agent-panel; do
+            current="$(gh api "/orgs/$OWNER/packages/container/$package" --jq .visibility 2>/dev/null || echo missing)"
+            if [ "$current" = "public" ]; then
+              echo "$package: already public"
+              continue
+            fi
+            if [ "$current" = "missing" ]; then
+              echo "$package: not found (publish it first)"; continue
+            fi
+            gh api -X PATCH "/orgs/$OWNER/packages/container/$package" -f visibility=public >/dev/null
+            echo "$package: $current -> public"
+          done
