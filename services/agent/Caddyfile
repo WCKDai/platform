@@ -6,5 +6,5 @@
 		-Server
 	}
 
-	reverse_proxy panel:7800
+	reverse_proxy 127.0.0.1:7800
 }

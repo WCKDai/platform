@@ -1,8 +1,13 @@
 # WCKD agent stack: Autobot + the authenticated control panel, behind Caddy.
 #
-# Invincible stays the gateway: point GATEWAY_URL at the node that runs it.  Keeping the
-# model server out of this compose file means the agent can be redeployed without moving
-# a 15 GB model or restarting the thing that serves every other model call.
+# Invincible stays the gateway: run it on this host and keep it out of this compose file, so the
+# agent can be redeployed without moving a 15 GB model or restarting the thing that serves every
+# other model call.
+#
+# Invincible and Autobot only listen on loopback by design (paired devices reach the agent
+# through the gateway). The agent, panel and Caddy therefore use host networking, which puts them
+# in the host's loopback namespace next to Invincible. This requires a Linux Docker host; Docker
+# Desktop on macOS keeps containers in a VM and cannot see the host's 127.0.0.1.
 #
 #   cp .env.example .env
 #   panel/scripts/hash-password.mjs '...'   # put in PANEL_PASSWORD_HASH
@@ -17,22 +22,17 @@ services:
     build:
       context: ./images/autobot
     restart: unless-stopped
+    network_mode: host
     environment:
       AUTOBOT_HOME: /data
       INVINCIBLE_HOME: /invincible
-      GATEWAY_URL: ${GATEWAY_URL:-http://host.docker.internal:7777/v1}
+      GATEWAY_URL: ${GATEWAY_URL:-http://127.0.0.1:7777/v1}
       APPROVALS_MODE: ${APPROVALS_MODE:-auto}
       AGENT_WORKDIR: /workspace
     volumes:
       - agent-data:/data
       - ${INVINCIBLE_DATA:-./data/invincible}:/invincible:ro
       - ${WORKSPACE:-./workspace}:/workspace
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    networks:
-      - internal
-    expose:
-      - "7792"
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -43,11 +43,12 @@ services:
     build:
       context: ./panel
     restart: unless-stopped
+    network_mode: host
     environment:
       PORT: "7800"
-      PANEL_BIND: 0.0.0.0
-      GATEWAY_URL: ${GATEWAY_URL:-http://host.docker.internal:7777/v1}
-      AGENT_URL: http://agent:7792
+      PANEL_BIND: 127.0.0.1
+      GATEWAY_URL: ${GATEWAY_URL:-http://127.0.0.1:7777/v1}
+      AGENT_URL: ${AGENT_URL:-http://127.0.0.1:7792}
       INVINCIBLE_TOKEN: ${INVINCIBLE_TOKEN:?set INVINCIBLE_TOKEN}
       PANEL_PASSWORD_HASH: ${PANEL_PASSWORD_HASH:?set PANEL_PASSWORD_HASH}
       PANEL_SECRET: ${PANEL_SECRET:?set PANEL_SECRET}
@@ -55,10 +56,6 @@ services:
     depends_on:
       agent:
         condition: service_healthy
-    networks:
-      - internal
-    expose:
-      - "7800"
     read_only: true
     tmpfs:
       - /tmp
@@ -70,28 +67,17 @@ services:
   caddy:
     image: caddy:2.10-alpine
     restart: unless-stopped
+    network_mode: host
     depends_on:
       - panel
     environment:
       PANEL_DOMAIN: ${PANEL_DOMAIN:?set PANEL_DOMAIN}
-    ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
       - caddy-config:/config
-    networks:
-      - internal
-      - web
     security_opt:
       - no-new-privileges:true
-
-networks:
-  internal:
-    internal: true
-  web:
 
 volumes:
   agent-data:

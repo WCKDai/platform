@@ -1,23 +1,29 @@
 # Agent stack: Autobot + Invincible control
 
 A self-hosted agent deployment: Autobot behind Caddy, with an authenticated control panel, on a
-host that runs Docker. Invincible remains the gateway; point the stack at the node that serves the
-models and holds the token.
+Linux host that runs Docker and Invincible.
 
 ```text
                     Caddy :80/:443
                          │
-                    panel :7800        authenticated humans
+                    panel 127.0.0.1:7800   authenticated humans
                          │
-                    agent :7792        Autobot API
+                    agent 127.0.0.1:7792   Autobot API
                          │
-              Invincible gateway :7777  models, policy, receipts
+              Invincible gateway 127.0.0.1:7777   models, policy, receipts
 ```
 
 The gateway is deliberately not in this compose file. Deploying a model server is a different
 lifecycle from deploying an agent, and a 15 GB model should not move because the panel changed.
-Point `GATEWAY_URL` at an Invincible node on the same host, on the private network, or across
-Tailscale. The node's token is mounted read-only from `INVINCIBLE_DATA`.
+
+Invincible and Autobot both listen only on loopback by design: paired devices reach the agent
+through the gateway. A normal Docker bridge would put the containers on another host, where
+`127.0.0.1` is not the node, so the agent, panel and Caddy use **host networking** and share the
+host's loopback with Invincible. This needs a Linux Docker host; Docker Desktop on macOS keeps
+containers in a VM and cannot reach the macOS host's loopback.
+
+Install Invincible on the host (`curl -fsSL https://invincible.sh/install.sh | sh`), then give the
+stack its token. The node's token is mounted read-only from `INVINCIBLE_DATA`.
 
 ## First deploy
 
@@ -49,14 +55,18 @@ also contains `invincible` if the gateway is installed on the same host. The age
 | `${INVINCIBLE_DATA}` read-only | the gateway token Autobot reads (`/invincible/token`) |
 | `caddy-data` | TLS certificates and ACME state |
 
+The panel binds `127.0.0.1:7800`, the agent `127.0.0.1:7792`, and Caddy owns `:80`/`:443`. None of
+the internal ports is reachable from another machine.
+
 The agent runs with `APPROVALS_MODE=auto` by default: interactive coding can edit the workspace,
 while scheduled/board work still downgrades to `allowlist`. Set `APPROVALS_MODE=edits` or
 `allowlist` for a tighter default.
 
 ## API and panel
 
-The Autobot API is not published to the host. The panel proxies the read and approval calls it
-needs; it never exposes `/v1/agent` directly and never returns the gateway token. See
+The Autobot API is not published beyond the host: it binds `127.0.0.1:7792` in the host's network
+namespace. The panel proxies the read and approval calls it needs; it never exposes `/v1/agent`
+directly and never returns the gateway token. See
 [`panel/README.md`](panel/README.md) for the panel's routes and security model.
 
 ## Deploy through Coolify (the alpha path)
@@ -83,8 +93,8 @@ application's **Environment** tab. The default public URL is
 The workflow waits for `running:healthy` and then checks `/healthz`.
 
 This uses LiteLLM for model access, so it proves the agent + gateway + panel path without a GPU on
-the worker. To use a local model later, replace the gateway service with an engine-bearing image
-and set `GATEWAY_URL` to it; the agent and panel do not change.
+the worker. To use a local model later, replace the cloud block in the gateway service with an
+engine-bearing image; the agent and panel do not change.
 
 ## Deploying to a host over SSH
 
