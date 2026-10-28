@@ -26,6 +26,9 @@ jobs:
           echo "## app"
           curl -sS --max-time 30 "${auth[@]}" "$base/applications/$uuid" \
             | jq '{status, fqdn, docker_compose_domains, ports_exposes, build_pack, updated_at}'
+          echo "## envs"
+          curl -sS --max-time 30 "${auth[@]}" "$base/applications/$uuid/envs" \
+            | jq '[.[] | {key, is_runtime, is_buildtime, is_preview, is_literal, is_shown_once}]'
           deps="$(curl -sS --max-time 30 "${auth[@]}" "$base/deployments/applications/$uuid?take=5" || echo '[]')"
           echo "## shape"
           jq -c 'if type == "array" then {type: "array", length: length, kinds: (map(type) | unique)} elif type == "object" then {type: "object", keys: keys} else {type: type, value: .} end' <<<"$deps"
