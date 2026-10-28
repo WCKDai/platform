@@ -98,9 +98,15 @@ gh workflow run deploy-agent-coolify.yml -R WCKDai/platform --ref main
 ```
 
 The script writes `AGENT_GH_TOKEN` in the `infra` environment; the deploy workflow puts it in the
-Coolify application as `GH_TOKEN`. Autobot uses it for the HTTPS push and the GitHub API, so the
-panel's **PR** button opens the pull request itself. The token reaches only the agent container;
-the browser and the panel never see it.
+Coolify application as `GH_TOKEN`. Autobot uses it for the GitHub API, so the panel's **PR**
+button opens the pull request itself. The token reaches only the agent container; the browser and
+the panel never see it.
+
+On this repository a token-only push hits GitHub's workflow-scope rule: a branch whose history
+touches `.github/workflows` needs `Workflows: Read and write` on the token. The account SSH key
+keeps push working without that permission; the token handles only the PR API. Add
+`Workflows: Read and write` to the token if you want it to replace the SSH key entirely. Both are
+set up by this stack today: the SSH key for git, the token for the PR.
 
 Without a token, `./scripts/setup-alpha-git.sh` generates an **account SSH key** and stores it as
 `AGENT_GIT_SSH_KEY_B64`. The push then works over SSH, but the panel can only return the compare

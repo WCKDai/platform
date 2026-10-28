@@ -13,9 +13,10 @@ set -eu
 
 mkdir -p "$AUTOBOT_HOME" "$AGENT_WORKDIR"
 : "${HOME:=/root}"
-# A fine-grained GitHub token (GH_TOKEN) is used by git and the GitHub API directly. Without
-# one, an account SSH key makes the push work; the panel then returns the compare link.
-if [ -z "${GH_TOKEN:-}" ] && [ -n "${GIT_SSH_KEY_B64:-}" ]; then
+# The account SSH key makes git push work without a workflow-scoped token (GitHub refuses a
+# token push to a branch whose history touches .github/workflows without Workflows:write). The
+# GH_TOKEN, when present, is still used by the GitHub API to open the pull request.
+if [ -n "${GIT_SSH_KEY_B64:-}" ]; then
   mkdir -p "$HOME/.ssh"
   printf '%s' "$GIT_SSH_KEY_B64" | base64 -d > "$HOME/.ssh/id_ed25519"
   chmod 600 "$HOME/.ssh/id_ed25519"
