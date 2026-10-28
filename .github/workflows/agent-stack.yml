@@ -1,8 +1,8 @@
 name: Agent stack
 
-# Test the panel and compose file on every change; publish the two images on main and tags.
-# The deploy job is opt-in: set the `alpha` environment's ALPHA_DEPLOY=true only after the host
-# and its .env are ready.
+# Test the panel and both compose files on every change; publish the gateway, agent and panel
+# images on main. Deployment is the separate deploy-agent-coolify workflow (the alpha path); the
+# host-networking alternative is scripts/deploy-alpha.sh.
 
 on:
   push:
@@ -81,70 +81,3 @@ jobs:
             docker push "ghcr.io/$owner/$image:latest"
           done
 
-  deploy:
-    name: Deploy alpha
-    needs: build
-    if: github.event_name == 'workflow_dispatch' && vars.ALPHA_DEPLOY == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    environment: alpha
-    steps:
-      - uses: actions/checkout@v4
-      - name: Prepare SSH
-        env:
-          ALPHA_SSH_KEY: ${{ secrets.ALPHA_SSH_KEY }}
-          ALPHA_HOST: ${{ vars.ALPHA_HOST }}
-          ALPHA_PORT: ${{ vars.ALPHA_PORT || '22' }}
-        run: |
-          set -euo pipefail
-          [ -n "$ALPHA_SSH_KEY" ] || { echo "::error::ALPHA_SSH_KEY is not set"; exit 1; }
-          [ -n "$ALPHA_HOST" ] || { echo "::error::ALPHA_HOST is not set"; exit 1; }
-          install -d -m 700 ~/.ssh
-          printf '%s\n' "$ALPHA_SSH_KEY" > ~/.ssh/alpha
-          chmod 600 ~/.ssh/alpha
-          ssh-keyscan -p "$ALPHA_PORT" "$ALPHA_HOST" >> ~/.ssh/known_hosts 2>/dev/null
-      - name: Sync stack
-        env:
-          ALPHA_HOST: ${{ vars.ALPHA_HOST }}
-          ALPHA_USER: ${{ vars.ALPHA_USER || 'root' }}
-          ALPHA_PORT: ${{ vars.ALPHA_PORT || '22' }}
-        run: |
-          set -euo pipefail
-          rsync -az --delete \
-            --exclude '.env' --exclude 'data/' --exclude 'workspace/' --exclude 'images/autobot/bin/' \
-            -e "ssh -i ~/.ssh/alpha -o BatchMode=yes -p $ALPHA_PORT" \
-            services/agent/ "$ALPHA_USER@$ALPHA_HOST:/opt/wckd-agent/"
-      - name: Pull and restart
-        env:
-          ALPHA_HOST: ${{ vars.ALPHA_HOST }}
-          ALPHA_USER: ${{ vars.ALPHA_USER || 'root' }}
-          ALPHA_PORT: ${{ vars.ALPHA_PORT || '22' }}
-          OWNER: ${{ github.repository_owner }}
-          GHCR_USER: ${{ vars.GHCR_USER || github.actor }}
-          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
-        run: |
-          set -euo pipefail
-          owner="$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')"
-          if [ -n "$GHCR_TOKEN" ]; then
-            printf '%s' "$GHCR_TOKEN" | ssh -i ~/.ssh/alpha -o BatchMode=yes -p "$ALPHA_PORT" "$ALPHA_USER@$ALPHA_HOST" \
-              "docker login ghcr.io -u '$GHCR_USER' --password-stdin"
-          fi
-          ssh -i ~/.ssh/alpha -o BatchMode=yes -p "$ALPHA_PORT" "$ALPHA_USER@$ALPHA_HOST" \
-            "cd /opt/wckd-agent && test -f .env && \
-             AUTOBOT_IMAGE=ghcr.io/$owner/wckd-autobot:${{ github.sha }} \
-             PANEL_IMAGE=ghcr.io/$owner/wckd-agent-panel:${{ github.sha }} \
-             docker compose pull && \
-             AUTOBOT_IMAGE=ghcr.io/$owner/wckd-autobot:${{ github.sha }} \
-             PANEL_IMAGE=ghcr.io/$owner/wckd-agent-panel:${{ github.sha }} \
-             docker compose up -d --no-build --remove-orphans && docker compose ps"
-      - name: Health
-        env:
-          ALPHA_DOMAIN: ${{ vars.ALPHA_DOMAIN }}
-        run: |
-          set -euo pipefail
-          for i in 1 2 3 4 5 6; do
-            if curl -fsS --max-time 10 "https://$ALPHA_DOMAIN/healthz"; then exit 0; fi
-            sleep 10
-          done
-          echo "::error::panel health check did not pass"
-          exit 1
