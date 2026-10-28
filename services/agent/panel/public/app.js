@@ -201,13 +201,35 @@ async function runTask(event) {
     if (!response.body) throw new Error(`agent answered ${response.status}`);
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
+    let buffer = "";
+    const consume = (line) => {
+      if (!line.startsWith("data:")) return;
+      const payload = line.slice(5).trim();
+      if (!payload) return;
+      try {
+        const event = JSON.parse(payload);
+        if (event.type === "text") output.textContent += event.text || "";
+        else if (event.type === "tool") output.textContent += `\n› ${event.text || "tool"}\n`;
+        else if (event.type === "answer") output.textContent += `\n${event.text || ""}\n`;
+        else if (event.type === "receipt") output.textContent += `· receipt ${String(event.id || "").slice(0, 8)}${event.model ? ` ${event.model}` : ""}\n`;
+        else if (event.type === "error") output.textContent += `\n[error] ${event.text || "error"}\n`;
+      } catch {
+        output.textContent += `${payload}\n`;
+      }
+    };
     for (;;) {
       const { value, done } = await reader.read();
       if (done) break;
-      output.textContent += decoder.decode(value, { stream: true });
+      buffer += decoder.decode(value, { stream: true });
+      let at;
+      while ((at = buffer.indexOf("\n")) >= 0) {
+        consume(buffer.slice(0, at).trimEnd());
+        buffer = buffer.slice(at + 1);
+      }
       output.scrollTop = output.scrollHeight;
     }
-    output.textContent += "\n\n";
+    if (buffer.trim()) consume(buffer.trim());
+    output.textContent += "\n";
   } catch (error) {
     output.textContent += `\n[error] ${error.message || error}\n`;
   } finally {
