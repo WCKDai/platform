@@ -104,7 +104,8 @@ jobs:
             -H "Authorization: Bearer $COOLIFY_API_TOKEN" -H "Content-Type: application/json" \
             -d "$body" "${COOLIFY_URL%/}/api/v1/applications/$APP_UUID")"
           code="$(tail -n 1 <<<"$response")"
-          echo "domain: HTTP $code $domain"
+          payload="$(sed '$d' <<<"$response")"
+          echo "domain: HTTP $code $domain: $payload"
           [ "$code" = "200" ] || [ "$code" = "201" ] || exit 1
 
       - name: Write the application environment
