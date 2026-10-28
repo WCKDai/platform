@@ -187,8 +187,9 @@ The 0.0.23 alpha stack is deployed through Coolify at
 - the panel's rooms load: Overview, Chat, Workspaces, Bots, Integrations, Usage and Settings;
 - an answer turn returned `alpha` with a gateway receipt; a tool turn wrote a file in `/workspace`;
 - a thread was created from the project in `/workspace`, a tool task wrote inside its worktree,
-  the panel showed the diff, and **PR** committed and pushed the branch (a local remote, so the
-  result said it was not GitHub); the thread was then removed;
+  the panel showed the diff, and **PR** committed and pushed the branch to GitHub for real
+  through the account SSH key; the panel returned the compare URL; the branch was deleted and
+  the thread removed after the test;
 - Playwright drove the chat and thread flows with no page errors.
 
 `/workspace` holds a clone of the public `WCKDai/platform` repository as the working demo
