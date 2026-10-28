@@ -33,8 +33,9 @@ secrets="$(gh secret list -R "$REPO" --env "$ENV" 2>/dev/null || true)"
 
 if [ -n "${GH_TOKEN:-}" ]; then
   printf 'AGENT_GH_TOKEN=%s\n' "$GH_TOKEN" | gh secret set -R "$REPO" --env "$ENV" -f -
-  echo "set AGENT_GH_TOKEN; the existing SSH key, if any, stays for git push (the token is for"
-  echo "the GitHub PR API). Run the deploy workflow to apply it."
+  echo "set AGENT_GH_TOKEN; run the deploy workflow to apply it."
+  echo "With Workflows: Read and write on the token it does both the push and the PR; an existing"
+  echo "SSH key, if any, stays as a fallback for the push."
   exit 0
 fi
 if [ "$ROTATE" = 0 ] && printf '%s\n' "$secrets" | grep -q '^AGENT_GH_TOKEN'; then

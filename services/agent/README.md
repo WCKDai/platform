@@ -98,15 +98,15 @@ gh workflow run deploy-agent-coolify.yml -R WCKDai/platform --ref main
 ```
 
 The script writes `AGENT_GH_TOKEN` in the `infra` environment; the deploy workflow puts it in the
-Coolify application as `GH_TOKEN`. Autobot uses it for the GitHub API, so the panel's **PR**
-button opens the pull request itself. The token reaches only the agent container; the browser and
-the panel never see it.
+Coolify application as `GH_TOKEN`. With **Contents** and **Pull requests** write, the token opens
+the pull request; with **Workflows: Read and write** as well, it pushes the branch too. The token
+reaches only the agent container; the browser and the panel never see it.
 
-On this repository a token-only push hits GitHub's workflow-scope rule: a branch whose history
-touches `.github/workflows` needs `Workflows: Read and write` on the token. The account SSH key
-keeps push working without that permission; the token handles only the PR API. Add
-`Workflows: Read and write` to the token if you want it to replace the SSH key entirely. Both are
-set up by this stack today: the SSH key for git, the token for the PR.
+This repository's branch history touches `.github/workflows`, so a token without Workflows write
+is refused when pushing; an account SSH key (`GIT_SSH_KEY_B64`) is the fallback for the push while
+the token still opens the PR. The current alpha uses the PAT alone, with Workflows write. Add the
+permission to make the token self-sufficient; use the SSH fallback if you would rather not grant
+it.
 
 Without a token, `./scripts/setup-alpha-git.sh` generates an **account SSH key** and stores it as
 `AGENT_GIT_SSH_KEY_B64`. The push then works over SSH, but the panel can only return the compare
@@ -193,9 +193,9 @@ The 0.0.24 alpha stack is deployed through Coolify at
 - the panel's rooms load: Overview, Chat, Workspaces, Bots, Integrations, Usage and Settings;
 - an answer turn returned `alpha` with a gateway receipt; a tool turn wrote a file in `/workspace`;
 - a thread was created from the project in `/workspace`, a tool task wrote inside its worktree,
-  the panel showed the diff, and **PR** committed and pushed the branch to GitHub for real
-  through the account SSH key; the panel returned the compare URL; the branch was deleted and
-  the thread removed after the test;
+  the panel streamed the live turn with diffs and tool outputs, and **PR** committed, pushed and
+  opened a real GitHub pull request through the PAT alone (Workflows write); the panel returned
+  `pr_url`/`pr_number`; the test PR was closed, its branch deleted and the thread removed;
 - Playwright drove the chat and thread flows with no page errors.
 
 `/workspace` holds a clone of the public `WCKDai/platform` repository as the working demo
