@@ -6,7 +6,7 @@
 #
 #   cp .env.example .env
 #   panel/scripts/hash-password.mjs '...'   # put in PANEL_PASSWORD_HASH
-#   scripts/fetch-linux-binaries.sh v0.0.21
+#   scripts/fetch-linux-binaries.sh v0.0.22
 #   docker compose up -d --build
 #
 name: wckd-agent
