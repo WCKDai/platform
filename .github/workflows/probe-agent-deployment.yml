@@ -34,9 +34,11 @@ jobs:
           echo
           dep_uuid="$(jq -r 'if type == "array" then . elif type == "object" and (.deployments | type) == "array" then .deployments else [] end | map(select(type == "object" and .deployment_uuid != null)) | sort_by(.created_at // "") | last | .deployment_uuid // empty' <<<"$deps")"
           echo "## deployment=$dep_uuid"
+          echo "## logs from the list"
+          jq -r '(.deployments // .) | map(select(type == "object" and .deployment_uuid != null)) | sort_by(.created_at // "") | last | .logs // empty' <<<"$deps" \
+            | sed -E 's/[A-Za-z0-9_\/+=-]{40,}/***/g' | tail -150
+          echo "## logs from the record"
           if [ -n "$dep_uuid" ]; then
-            curl -sS --max-time 30 "${auth[@]}" "$base/deployments/$dep_uuid" \
-              | jq -r '.logs // .message // empty' \
-              | sed -E 's/[A-Za-z0-9_\/+=-]{40,}/***/g' \
-              | tail -150
+            curl -sS -w '\nHTTP %{http_code}\n' --max-time 30 "${auth[@]}" "$base/deployments/$dep_uuid" \
+              | sed -E 's/[A-Za-z0-9_\/+=-]{40,}/***/g' | tail -40
           fi
