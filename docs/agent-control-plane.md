@@ -106,6 +106,12 @@ agent reads the gateway token from its own read-only volume. The gateway chooses
 records the receipt and audits. This is the difference between a self-hosted agent and a pile of
 API keys in a `.env`.
 
+Invincible and Autobot both bind loopback only, by policy. A container stack therefore cannot put
+them on a normal bridge and talk service-to-service; the gateway, agent and panel share the
+gateway's network namespace (Coolify) or the host's (the host-networking compose). The public edge
+terminates TLS and reaches only the panel, and the panel reads the gateway token from its
+environment rather than a world-readable file.
+
 ## Build order
 
 1. **Thread worktrees** — create, list, diff and remove a worktree per Autobot session.
@@ -120,3 +126,9 @@ API keys in a `.env`.
 The first three are the difference between "an agent in a terminal" and "a control plane". The
 panel and compose stack under `services/agent/` are the deployed start of that surface; the gateway
 stays the thing that makes it trustworthy.
+
+**Deployed on 2026-10-28:** the alpha panel at
+[`agent.62.83.75.115.sslip.io`](https://agent.62.83.75.115.sslip.io) runs the gateway, Autobot and
+panel together in the PolyCore Coolify project. All three are healthy; login, CSRF, overview,
+an answer turn with a receipt, a tool turn that wrote a file, and logout were verified. The images
+are built on the host into a loopback registry until the GHCR packages are public (INV-82).
