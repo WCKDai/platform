@@ -147,8 +147,12 @@ jobs:
             -H "Authorization: Bearer $COOLIFY_API_TOKEN" -H "Accept: application/json" \
             "${COOLIFY_URL%/}/api/v1/deploy?uuid=$APP_UUID")"
           code="$(tail -n 1 <<<"$response")"
-          echo "deploy: HTTP $code $(sed '$d' <<<"$response")"
+          body="$(sed '$d' <<<"$response")"
+          echo "deploy: HTTP $code $body"
           [ "$code" = "200" ] || [ "$code" = "201" ] || exit 1
+          dep="$(jq -r '.deployment_uuid // .deployments[0].deployment_uuid // empty' <<<"$body" 2>/dev/null || true)"
+          echo "requested deployment: ${dep:-unknown}"
+          [ -n "$dep" ] && echo "DEPLOYMENT_UUID=$dep" >>"$GITHUB_ENV"
 
       - name: Wait for the application
         env:
@@ -160,11 +164,24 @@ jobs:
           auth=(-H "Authorization: Bearer $COOLIFY_API_TOKEN" -H "Accept: application/json")
           exited=0
           for i in $(seq 1 90); do
-            deps="$(curl -fsS --max-time 30 "${auth[@]}" \
-              "$base/deployments/applications/$APP_UUID?take=5" || echo '[]')"
-            latest="$(jq -c 'if type == "array" then . elif (type == "object" and (.deployments | type) == "array") then .deployments else [] end | map(select(type == "object" and .deployment_uuid != null)) | sort_by(.created_at // "") | last // {}' <<<"$deps")"
-            dep_status="$(jq -r '.status // "none"' <<<"$latest")"
-            dep_uuid="$(jq -r '.deployment_uuid // empty' <<<"$latest")"
+            if [ -n "${DEPLOYMENT_UUID:-}" ]; then
+              dep="$(curl -sS --max-time 30 "${auth[@]}" "$base/deployments/$DEPLOYMENT_UUID" || echo '{}')"
+              dep_status="$(jq -r '.status // "none"' <<<"$dep" 2>/dev/null || echo none)"
+              dep_uuid="$DEPLOYMENT_UUID"
+              case "$dep_status" in
+                none|"")
+                  deps="$(curl -sS --max-time 30 "${auth[@]}" "$base/deployments/applications/$APP_UUID?take=5" || echo '[]')"
+                  latest="$(jq -c 'if type == "array" then . elif (type == "object" and (.deployments | type) == "array") then .deployments else [] end | map(select(type == "object" and .deployment_uuid != null)) | sort_by(.created_at // "") | last // {}' <<<"$deps")"
+                  dep_status="$(jq -r '.status // "none"' <<<"$latest")"
+                  dep_uuid="$(jq -r '.deployment_uuid // empty' <<<"$latest")"
+                  ;;
+              esac
+            else
+              deps="$(curl -sS --max-time 30 "${auth[@]}" "$base/deployments/applications/$APP_UUID?take=5" || echo '[]')"
+              latest="$(jq -c 'if type == "array" then . elif (type == "object" and (.deployments | type) == "array") then .deployments else [] end | map(select(type == "object" and .deployment_uuid != null)) | sort_by(.created_at // "") | last // {}' <<<"$deps")"
+              dep_status="$(jq -r '.status // "none"' <<<"$latest")"
+              dep_uuid="$(jq -r '.deployment_uuid // empty' <<<"$latest")"
+            fi
             app="$(curl -fsS --max-time 30 "${auth[@]}" "$base/applications/$APP_UUID")"
             status="$(jq -r '.status // "unknown"' <<<"$app")"
             echo "attempt $i: deployment=$dep_status ($dep_uuid) application=$status"
@@ -172,7 +189,7 @@ jobs:
               echo "::error::the deployment $dep_status"
               exit 1
             fi
-            if [ "$status" = "running:healthy" ]; then exit 0; fi
+            if [ "$dep_status" = "finished" ] && [ "$status" = "running:healthy" ]; then exit 0; fi
             if [ "$dep_status" = "finished" ] && [ "$status" != "running:healthy" ]; then
               exited=$((exited + 1))
               if [ "$exited" -ge 3 ]; then
