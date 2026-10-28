@@ -13,8 +13,10 @@ Linux host that runs Docker and Invincible.
               Invincible gateway 127.0.0.1:7777   models, policy, receipts
 ```
 
-The gateway is deliberately not in this compose file. Deploying a model server is a different
-lifecycle from deploying an agent, and a 15 GB model should not move because the panel changed.
+The gateway is deliberately not in this host-networking compose file. Deploying a model server is
+a different lifecycle from deploying an agent, and a 15 GB model should not move because the panel
+changed. The Coolify compose below does include a cloud-only gateway because the alpha worker has
+no local model.
 
 Invincible and Autobot both listen only on loopback by design: paired devices reach the agent
 through the gateway. A normal Docker bridge would put the containers on another host, where
@@ -112,10 +114,11 @@ engine-bearing image; the agent and panel do not change.
 
 ## Deploying to a host over SSH
 
-There is no usable `alpha` SSH alias, DNS record, or Hetzner API token on the development machine
-as of 2026-10-28. Do not repurpose an unrelated host: name the target explicitly first.
+The alpha host is the Coolify worker `alpha` at `62.83.75.115`; `root` SSH works from the
+development machine. The Coolify path is the one in use. The host-networking compose below is the
+alternative for a dedicated Linux node that runs Invincible on the host itself.
 
-Once the host is named, use either:
+Use either:
 
 ```bash
 ALPHA_HOST=... ALPHA_USER=root ./scripts/deploy-alpha.sh
@@ -123,11 +126,11 @@ ALPHA_HOST=... ALPHA_USER=root ./scripts/deploy-alpha.sh
 
 or the gated **agent-stack** workflow in `.github/workflows/agent-stack.yml` (environment
 `alpha`, with `ALPHA_HOST`, `ALPHA_USER`, `ALPHA_SSH_KEY`, and `ALPHA_DEPLOY=true`). The workflow
-builds the panel and agent images, pushes them to GHCR, then pulls and restarts on the host. The
+builds the gateway, agent and panel images, pushes them to GHCR, then pulls and restarts on the host. The
 deploy job is skipped unless `ALPHA_DEPLOY` is explicitly true.
 
 The images are private by default. Set `GHCR_TOKEN` (a token with `read:packages`) and
-`GHCR_USER` in the alpha environment, or make the two packages public, then the workflow (or
+`GHCR_USER` in the alpha environment, or make the three packages public, then the workflow (or
 `GHCR_TOKEN=... GHCR_USER=... ./scripts/deploy-alpha.sh`) logs in before `docker compose pull`.
 If you prefer to build on the host, run `docker compose up -d --build` with
 `images/autobot/bin/autobot` present.
@@ -140,6 +143,15 @@ If you prefer to build on the host, run `docker compose up -d --build` with
 - `autobot doctor` through the agent container — model, sandbox and gateway.
 - A first task from the panel, then `docker compose logs -f agent panel caddy`.
 
-The stack has not been deployed to a Hetzner host from this checkout: the environment was not
-reachable and no alpha credentials exist here. The local stack and panel are tested; the compose
-file is ready for a named host.
+The alpha stack is deployed through Coolify at
+`https://agent.62.83.75.115.sslip.io` and was verified on 2026-10-28:
+
+- all three containers healthy (`gateway`, `agent`, `panel`);
+- Let's Encrypt certificate on the public domain;
+- login 303, dashboard and `/api/overview` 200, a missing CSRF token 403, logout 200;
+- an answer turn returned `alpha` with a gateway receipt;
+- a tool turn ran `printf 'ok' > alpha-ok.txt`, wrote the file in the agent's `/workspace`, and
+  returned the tool event plus the receipt.
+
+The panel password, gateway token and session secret are in the Coolify application's
+**Environment** tab. The test file and session were cleaned up; the panel login was logged out.
