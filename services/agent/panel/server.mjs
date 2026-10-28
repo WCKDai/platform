@@ -164,10 +164,11 @@ function validId(id) {
 }
 
 async function upstream(base, route, init = {}) {
+  const { timeout = 20_000, ...options } = init;
   const response = await fetch(base + route, {
-    ...init,
-    headers: { Authorization: `Bearer ${TOKEN}`, ...(init.headers || {}) },
-    signal: AbortSignal.timeout(20_000),
+    ...options,
+    headers: { Authorization: `Bearer ${TOKEN}`, ...(options.headers || {}) },
+    signal: AbortSignal.timeout(timeout),
   });
   const text = await response.text();
   let value = text;
@@ -239,6 +240,14 @@ const server = http.createServer(async (request, response) => {
       return redirect(response, "/");
     }
 
+    const asset = STATIC[url.pathname];
+    if (asset) {
+      const [content, type] = staticFile(asset[0], asset[1]);
+      securityHeaders(response);
+      response.writeHead(200, { "Content-Type": type, "Cache-Control": "public, max-age=300" });
+      return response.end(content);
+    }
+
     const session = current(request);
     if (!session) {
       if (url.pathname.startsWith("/api/")) return json(response, 401, { error: "sign in first" });
@@ -261,22 +270,141 @@ const server = http.createServer(async (request, response) => {
     }
 
     if (url.pathname === "/api/overview") {
-      const [models, node, info, stats, conversations, approvals, usage, insights, audit] = await Promise.all([
-        safely(GATEWAY, "/v1/models"),
-        safely(GATEWAY, "/v1/node"),
-        safely(AGENT, "/v1/agent"),
-        safely(AGENT, "/v1/agent/stats"),
-        safely(AGENT, "/v1/agent/sessions"),
-        safely(AGENT, "/v1/agent/approvals"),
-        safely(AGENT, "/v1/agent/usage"),
-        safely(AGENT, "/v1/agent/insights?days=1"),
-        safely(GATEWAY, "/v1/audit?limit=30"),
-      ]);
+      const [models, node, info, stats, conversations, approvals, usage, insights, audit, threads, bots, settings] =
+        await Promise.all([
+          safely(GATEWAY, "/v1/models"),
+          safely(GATEWAY, "/v1/node"),
+          safely(AGENT, "/v1/agent"),
+          safely(AGENT, "/v1/agent/stats"),
+          safely(AGENT, "/v1/agent/sessions"),
+          safely(AGENT, "/v1/agent/approvals"),
+          safely(AGENT, "/v1/agent/usage"),
+          safely(AGENT, "/v1/agent/insights?days=1"),
+          safely(GATEWAY, "/v1/audit?limit=30"),
+          safely(AGENT, "/v1/agent/threads"),
+          safely(AGENT, "/v1/agent/bots"),
+          safely(AGENT, "/v1/agent/settings"),
+        ]);
       return json(response, 200, {
         gateway: { models, node },
         agent: { info, stats, sessions: conversations, approvals, usage, insights },
         audit,
+        threads,
+        bots,
+        settings,
       });
+    }
+
+    if (url.pathname === "/api/threads" && request.method === "GET") {
+      const result = await safely(AGENT, "/v1/agent/threads");
+      return json(response, result.status || 502, result.value);
+    }
+
+    if (url.pathname === "/api/threads" && request.method === "POST") {
+      const payload = JSON.parse(await body(request, 64 * 1024));
+      const result = await upstream(AGENT, "/v1/agent/threads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: String(payload.name || ""), base: payload.base || null }),
+      });
+      return json(response, result.status, result.value);
+    }
+
+    const threadPath = url.pathname.match(/^\/api\/threads\/([^/]+)(?:\/(diff|pr))?$/);
+    if (threadPath) {
+      const id = decodeURIComponent(threadPath[1]);
+      if (!validId(id)) return json(response, 400, { error: "not a thread id" });
+      const action = threadPath[2];
+      if (action === "diff" && request.method === "GET") {
+        const result = await upstream(AGENT, `/v1/agent/threads/${encodeURIComponent(id)}/diff`);
+        return json(response, result.status, result.value);
+      }
+      if (action === "pr" && request.method === "POST") {
+        const payload = JSON.parse(await body(request, 64 * 1024));
+        const result = await upstream(AGENT, `/v1/agent/threads/${encodeURIComponent(id)}/pr`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title: payload.title || null, body: payload.body || null, base: payload.base || null }),
+          timeout: 120_000,
+        });
+        return json(response, result.status, result.value);
+      }
+      if (!action && request.method === "DELETE") {
+        const force = url.searchParams.get("force") ? "?force=1" : "";
+        const result = await upstream(AGENT, `/v1/agent/threads/${encodeURIComponent(id)}${force}`, { method: "DELETE" });
+        return json(response, result.status, result.value);
+      }
+    }
+
+    if (url.pathname === "/api/settings" && request.method === "POST") {
+      const payload = JSON.parse(await body(request, 64 * 1024));
+      const bot = String(payload.bot || "").trim();
+      const query = bot ? `?bot=${encodeURIComponent(bot)}` : "";
+      const result = await upstream(AGENT, `/v1/agent/settings${query}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: String(payload.key || ""), value: String(payload.value ?? ""), literal: Boolean(payload.literal) }),
+      });
+      return json(response, result.status, result.value);
+    }
+
+    if (url.pathname === "/api/model" && request.method === "POST") {
+      const payload = JSON.parse(await body(request, 64 * 1024));
+      const bot = String(payload.bot || "").trim();
+      const query = bot ? `?bot=${encodeURIComponent(bot)}` : "";
+      const result = await upstream(AGENT, `/v1/agent/model${query}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: String(payload.model || "") }),
+      });
+      return json(response, result.status, result.value);
+    }
+
+    if (url.pathname === "/api/tools" && request.method === "POST") {
+      const payload = JSON.parse(await body(request, 64 * 1024));
+      const bot = String(payload.bot || "").trim();
+      const query = bot ? `?bot=${encodeURIComponent(bot)}` : "";
+      const result = await upstream(AGENT, `/v1/agent/tools${query}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target: String(payload.target || ""), on: Boolean(payload.on) }),
+      });
+      return json(response, result.status, result.value);
+    }
+
+    if (url.pathname === "/api/secrets" && request.method === "POST") {
+      const payload = JSON.parse(await body(request, 64 * 1024));
+      const bot = String(payload.bot || "").trim();
+      const query = bot ? `?bot=${encodeURIComponent(bot)}` : "";
+      const result = await upstream(AGENT, `/v1/agent/secrets${query}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ file: String(payload.file || ""), value: String(payload.value || "") }),
+      });
+      return json(response, result.status, result.value);
+    }
+
+    if (url.pathname === "/api/bots" && request.method === "POST") {
+      const payload = JSON.parse(await body(request, 64 * 1024));
+      const result = await upstream(AGENT, "/v1/agent/bots", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      return json(response, result.status, result.value);
+    }
+
+    if (url.pathname === "/api/bots/reload" && request.method === "POST") {
+      const result = await upstream(AGENT, "/v1/agent/bots/reload", { method: "POST" });
+      return json(response, result.status, result.value);
+    }
+
+    const botPath = url.pathname.match(/^\/api\/bots\/([^/]+)\/(enable|disable)$/);
+    if (botPath && request.method === "POST") {
+      const name = decodeURIComponent(botPath[1]);
+      if (!validId(name)) return json(response, 400, { error: "not a bot name" });
+      const result = await upstream(AGENT, `/v1/agent/bots/${encodeURIComponent(name)}/${botPath[2]}`, { method: "POST" });
+      return json(response, result.status, result.value);
     }
 
     if (url.pathname === "/api/audit") {
@@ -336,14 +464,6 @@ const server = http.createServer(async (request, response) => {
       });
       if (reply.body) for await (const chunk of reply.body) response.write(chunk);
       return response.end();
-    }
-
-    const asset = STATIC[url.pathname];
-    if (asset) {
-      const [content, type] = staticFile(asset[0], asset[1]);
-      securityHeaders(response);
-      response.writeHead(200, { "Content-Type": type, "Cache-Control": "public, max-age=300" });
-      return response.end(content);
     }
 
     if (url.pathname.startsWith("/api/")) return json(response, 404, { error: "no such endpoint" });

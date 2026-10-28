@@ -61,7 +61,9 @@ The panel binds `127.0.0.1:7800`, the agent `127.0.0.1:7792`, and Caddy owns `:8
 the internal ports is reachable from another machine.
 
 The agent runs with `APPROVALS_MODE=auto` by default: interactive coding can edit the workspace,
-while scheduled/board work still downgrades to `allowlist`. Set `APPROVALS_MODE=edits` or
+while scheduled/board work still downgrades to `allowlist`. Set `GH_TOKEN` (repository contents
+and pull-request write) for one-click pull requests; without it, a thread's branch is still pushed
+when git has credentials, and the compare link is returned. Set `APPROVALS_MODE=edits` or
 `allowlist` for a tighter default.
 
 The container config sets `[agent] sandbox = "off"`: a normal Docker container cannot create the
@@ -73,9 +75,16 @@ want the inner sandbox as well. For a throwaway container this is the intended t
 ## API and panel
 
 The Autobot API is not published beyond the host: it binds `127.0.0.1:7792` in the host's network
-namespace. The panel proxies the read and approval calls it needs; it never exposes `/v1/agent`
-directly and never returns the gateway token. See
-[`panel/README.md`](panel/README.md) for the panel's routes and security model.
+namespace. The panel proxies the calls it needs (overview, sessions, turns, approvals, threads,
+settings, tools, secrets, bots, usage) and never exposes the raw `/v1/agent` surface or the
+gateway token. The rooms are Overview, Chat, Workspaces, Bots, Integrations, Usage and Settings;
+see [`panel/README.md`](panel/README.md) for the routes and security model.
+
+A thread is a session plus a git worktree under `$AUTOBOT_HOME/worktrees` and a branch
+`autobot/<id>`, made from the bot's workdir. The agent image includes `git`; the workdir must be a
+git repository. `thread pr` commits, pushes and opens a pull request with `gh` or the GitHub API
+(`GH_TOKEN`/`GITHUB_TOKEN`), or returns the compare link after the push. The panel's **Workspaces**
+room does the same with clicks. The agent container is the boundary; see the sandbox note above.
 
 ## Deploy through Coolify (the alpha path)
 
@@ -97,7 +106,7 @@ key, and deploys it. The stack is:
 
 Coolify generates the gateway token, panel password and session secret; find them in the
 application's **Environment** tab. The default public URL is
-`https://agent.<server-ip>.sslip.io`; pass the optional `domain` input to use a real domain.
+`https://agent.invincible.sh`; pass the optional `domain` input to change it.
 The workflow waits for `running:healthy` and then checks `/healthz`.
 
 The GHCR packages built by `agent-stack.yml` are private, and the Coolify worker has no registry
@@ -145,7 +154,7 @@ the host, run `docker compose up -d --build` with `images/autobot/bin/autobot` p
 - A first task from the panel, then `docker compose logs -f agent panel caddy`.
 
 The alpha stack is deployed through Coolify at
-`https://agent.62.83.75.115.sslip.io` and was verified on 2026-10-28:
+`https://agent.invincible.sh` and was verified on 2026-10-28:
 
 - all three containers healthy (`gateway`, `agent`, `panel`);
 - Let's Encrypt certificate on the public domain;

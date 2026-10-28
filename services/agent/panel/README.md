@@ -3,11 +3,19 @@
 One authenticated surface for an Invincible gateway and an Autobot agent. It is a small Node
 process with no runtime dependencies and no build step.
 
-- **Gateway:** models, health, node identity, and the recent audit/receipt stream.
-- **Agent:** bot/version, tasks, open sessions, waiting approvals, conversations.
-- **Approvals:** answer `once`, `always` or `deny` from the panel.
-- **Run a task:** start or continue an Autobot conversation and stream its output.
-- **History:** read a conversation's messages.
+- **Overview:** gateway models and node identity, the agent's tasks and conversations, today's
+  tokens and cost, and the approvals waiting.
+- **Chat:** a conversation transcript, a streamed turn, and a new conversation. The turn's tools
+  and receipts appear in the transcript; the session id comes back in `X-Session-Id`.
+- **Workspaces:** start a thread (a git worktree and branch from the bot's project), put it in
+  Chat with **Use**, read its **Diff**, open a **PR**, or remove it. A removed thread leaves a
+  tombstone so its old session cannot silently use the main checkout.
+- **Bots:** list, add, enable, disable and reload bots.
+- **Integrations:** the channel matrix for every bot, write-only token files (`mode 0600`) in the
+  bot's home, and the configured MCP servers.
+- **Usage:** today's turns, calls, tokens and cost; models, tools and failures; the gateway audit.
+- **Settings:** the models the gateway serves (keys stay in the gateway), this bot's model,
+  approvals, tool groups, the workdir/sandbox and any advanced dotted configuration key.
 
 The panel never receives a provider key. It holds one Invincible API token, and only the server
 side uses it. The browser sees the panel's own session cookie and a CSRF token.
@@ -51,6 +59,8 @@ outside the compose network.
 - Upstream calls use the token only server-side; no token or provider key reaches the browser.
 - The compose service runs read-only with all capabilities dropped and `no-new-privileges`.
 - The agent API and panel are on an internal Docker network; only Caddy publishes ports.
+- `app.css` and `app.js` are the only static assets and are served without a session (the login
+  page needs the stylesheet); neither contains a secret. Everything else requires the cookie.
 
 ## Test
 
@@ -61,4 +71,7 @@ node --check public/app.js
 
 The recorded local smoke test covered: login, dashboard, `/api/overview`, session listing,
 CSRF rejection (403), successful logout (200), bad password (401), unauthenticated API (401),
-and empty task validation (400).
+and empty task validation (400). The control-plane test additionally covered settings
+(`agent.max_steps`), tool groups, model selection, a write-only token file (`0600`), adding a bot,
+creating a thread, a task writing inside the worktree, its diff, its push to a local remote, and
+removing it; Playwright drove the same thread flow through the panel.

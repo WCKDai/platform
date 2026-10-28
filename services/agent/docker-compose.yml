@@ -29,6 +29,7 @@ services:
       GATEWAY_URL: ${GATEWAY_URL:-http://127.0.0.1:7777/v1}
       APPROVALS_MODE: ${APPROVALS_MODE:-auto}
       AGENT_WORKDIR: /workspace
+      GH_TOKEN: ${GH_TOKEN:-}
     volumes:
       - agent-data:/data
       - ${INVINCIBLE_DATA:-./data/invincible}:/invincible:ro

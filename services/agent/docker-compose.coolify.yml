@@ -54,6 +54,7 @@ services:
       GATEWAY_PRIVATE: "false"
       APPROVALS_MODE: auto
       AGENT_WORKDIR: /workspace
+      GH_TOKEN: ${GH_TOKEN:-}
     volumes:
       - agent-data:/data
       - gateway-data:/invincible:ro

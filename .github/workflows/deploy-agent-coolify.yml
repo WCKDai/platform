@@ -4,7 +4,7 @@ name: Deploy agent panel
 # project, points it at the existing LiteLLM gateway, and deploys it. One job: the Coolify token
 # and the LiteLLM key both live in the `infra` environment.
 #
-# The public panel gets an `agent.<server-ip>.sslip.io` domain unless AGENT_PANEL_DOMAIN is set.
+# The public panel defaults to `agent.invincible.sh`; set AGENT_PANEL_DOMAIN (or the domain input) to change it.
 # Coolify generates the gateway token, the panel password and the session secret; they are visible
 # in the application's Environment tab, never in this log.
 
@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       domain:
-        description: "Public panel URL (blank: agent.<server-ip>.sslip.io)"
+        description: "Public panel URL (blank: agent.invincible.sh)"
         required: false
         default: ""
 
@@ -90,12 +90,13 @@ jobs:
           COOLIFY_URL: ${{ vars.COOLIFY_URL }}
           COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
           WANTED: ${{ inputs.domain }}
+          DEFAULT_DOMAIN: ${{ vars.AGENT_PANEL_DOMAIN || 'agent.invincible.sh' }}
         run: |
           set -euo pipefail
-          domain="${WANTED:-}"
+          domain="${WANTED:-$DEFAULT_DOMAIN}"
           if [ -z "$domain" ]; then
-            [ -n "${SERVER_IP:-}" ] || { echo "::error::the Coolify server has no public IPv4; set the workflow domain input"; exit 1; }
-            domain="https://agent.${SERVER_IP}.sslip.io"
+            echo "::error::set AGENT_PANEL_DOMAIN or pass the domain input"
+            exit 1
           fi
           case "$domain" in https://*) ;; *) domain="https://$domain" ;; esac
           echo "DOMAIN=$domain" >>"$GITHUB_ENV"

@@ -128,7 +128,7 @@ panel and compose stack under `services/agent/` are the deployed start of that s
 stays the thing that makes it trustworthy.
 
 **Deployed on 2026-10-28:** the alpha panel at
-[`agent.62.83.75.115.sslip.io`](https://agent.62.83.75.115.sslip.io) runs the gateway, Autobot and
+[`agent.invincible.sh`](https://agent.invincible.sh) runs the gateway, Autobot and
 panel together in the PolyCore Coolify project. All three are healthy; login, CSRF, overview,
 an answer turn with a receipt, a tool turn that wrote a file, and logout were verified. The images
 are built on the host into a loopback registry until the GHCR packages are public (INV-82).
