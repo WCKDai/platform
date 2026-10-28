@@ -118,22 +118,15 @@ The alpha host is the Coolify worker `alpha` at `62.83.75.115`; `root` SSH works
 development machine. The Coolify path is the one in use. The host-networking compose below is the
 alternative for a dedicated Linux node that runs Invincible on the host itself.
 
-Use either:
-
 ```bash
 ALPHA_HOST=... ALPHA_USER=root ./scripts/deploy-alpha.sh
 ```
 
-or the gated **agent-stack** workflow in `.github/workflows/agent-stack.yml` (environment
-`alpha`, with `ALPHA_HOST`, `ALPHA_USER`, `ALPHA_SSH_KEY`, and `ALPHA_DEPLOY=true`). The workflow
-builds the gateway, agent and panel images, pushes them to GHCR, then pulls and restarts on the host. The
-deploy job is skipped unless `ALPHA_DEPLOY` is explicitly true.
-
-The images are private by default. Set `GHCR_TOKEN` (a token with `read:packages`) and
-`GHCR_USER` in the alpha environment, or make the three packages public, then the workflow (or
-`GHCR_TOKEN=... GHCR_USER=... ./scripts/deploy-alpha.sh`) logs in before `docker compose pull`.
-If you prefer to build on the host, run `docker compose up -d --build` with
-`images/autobot/bin/autobot` present.
+The **agent-stack** workflow only tests and publishes images now; deployment is the Coolify
+workflow for alpha. The images are private by default. Set `GHCR_TOKEN` (a token with
+`read:packages`) and `GHCR_USER` in the environment used by `deploy-alpha.sh`, or make the three
+packages public, then the script logs in before `docker compose pull`. If you prefer to build on
+the host, run `docker compose up -d --build` with `images/autobot/bin/autobot` present.
 
 ## Verification
 
