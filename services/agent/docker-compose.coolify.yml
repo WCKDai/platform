@@ -17,8 +17,7 @@ name: wckd-agent-coolify
 
 services:
   gateway:
-    build:
-      context: ./images/gateway
+    image: ${GATEWAY_IMAGE:-ghcr.io/wckdai/wckd-invincible-gateway:latest}
     restart: unless-stopped
     environment:
       INVINCIBLE_HOME: /data
@@ -39,9 +38,7 @@ services:
       start_period: 10s
 
   agent:
-    build:
-      context: ./images/autobot
-      dockerfile: Dockerfile.coolify
+    image: ${AUTOBOT_IMAGE:-ghcr.io/wckdai/wckd-autobot:latest}
     restart: unless-stopped
     network_mode: "service:gateway"
     environment:
@@ -67,8 +64,7 @@ services:
       start_period: 10s
 
   panel:
-    build:
-      context: ./panel
+    image: ${PANEL_IMAGE:-ghcr.io/wckdai/wckd-agent-panel:latest}
     restart: unless-stopped
     network_mode: "service:gateway"
     environment:

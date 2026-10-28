@@ -44,6 +44,9 @@ jobs:
           cp .env.example .env
           docker compose config >/dev/null
           rm .env
+          SERVICE_PASSWORD_64_INVINCIBLE=test SERVICE_PASSWORD_64_PANEL=test SERVICE_PASSWORD_64_SECRET=test \
+            CLOUD_BASE_URL=https://llm.example/v1 CLOUD_MODEL=test CLOUD_API_KEY=test \
+            docker compose -f docker-compose.coolify.yml config >/dev/null
       - name: Check the password hasher
         working-directory: services/agent/panel
         run: |
@@ -61,7 +64,7 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
-      - name: Build agent and panel images
+      - name: Build the agent, panel and gateway images
         working-directory: services/agent
         env:
           OWNER: ${{ github.repository_owner }}
@@ -72,10 +75,11 @@ jobs:
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
           docker build -t "ghcr.io/$owner/wckd-autobot:${{ github.sha }}" -t "ghcr.io/$owner/wckd-autobot:latest" images/autobot
           docker build -t "ghcr.io/$owner/wckd-agent-panel:${{ github.sha }}" -t "ghcr.io/$owner/wckd-agent-panel:latest" panel
-          docker push "ghcr.io/$owner/wckd-autobot:${{ github.sha }}"
-          docker push "ghcr.io/$owner/wckd-autobot:latest"
-          docker push "ghcr.io/$owner/wckd-agent-panel:${{ github.sha }}"
-          docker push "ghcr.io/$owner/wckd-agent-panel:latest"
+          docker build -t "ghcr.io/$owner/wckd-invincible-gateway:${{ github.sha }}" -t "ghcr.io/$owner/wckd-invincible-gateway:latest" images/gateway
+          for image in wckd-autobot wckd-agent-panel wckd-invincible-gateway; do
+            docker push "ghcr.io/$owner/$image:${{ github.sha }}"
+            docker push "ghcr.io/$owner/$image:latest"
+          done
 
   deploy:
     name: Deploy alpha
