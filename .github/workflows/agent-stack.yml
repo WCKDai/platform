@@ -1,0 +1,140 @@
+name: Agent stack
+
+# Test the panel and compose file on every change; publish the two images on main and tags.
+# The deploy job is opt-in: set the `alpha` environment's ALPHA_DEPLOY=true only after the host
+# and its .env are ready.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "services/agent/**"
+      - ".github/workflows/agent-stack.yml"
+  pull_request:
+    paths:
+      - "services/agent/**"
+      - ".github/workflows/agent-stack.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agent-stack-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Panel and compose
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Syntax check
+        working-directory: services/agent/panel
+        run: |
+          node --check server.mjs
+          node --check public/app.js
+      - name: Validate compose
+        working-directory: services/agent
+        run: |
+          cp .env.example .env
+          docker compose config >/dev/null
+          rm .env
+      - name: Check the password hasher
+        working-directory: services/agent/panel
+        run: |
+          hash="$(node scripts/hash-password.mjs 'test password')"
+          case "$hash" in scrypt:*) ;; *) echo "bad hash: $hash"; exit 1 ;; esac
+
+  build:
+    name: Publish images
+    needs: test
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build agent and panel images
+        working-directory: services/agent
+        env:
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          owner="$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')"
+          scripts/fetch-linux-binaries.sh v0.0.21 x86_64
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker build -t "ghcr.io/$owner/wckd-autobot:${{ github.sha }}" -t "ghcr.io/$owner/wckd-autobot:latest" images/autobot
+          docker build -t "ghcr.io/$owner/wckd-agent-panel:${{ github.sha }}" -t "ghcr.io/$owner/wckd-agent-panel:latest" panel
+          docker push "ghcr.io/$owner/wckd-autobot:${{ github.sha }}"
+          docker push "ghcr.io/$owner/wckd-autobot:latest"
+          docker push "ghcr.io/$owner/wckd-agent-panel:${{ github.sha }}"
+          docker push "ghcr.io/$owner/wckd-agent-panel:latest"
+
+  deploy:
+    name: Deploy alpha
+    needs: build
+    if: github.event_name == 'workflow_dispatch' && vars.ALPHA_DEPLOY == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: alpha
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare SSH
+        env:
+          ALPHA_SSH_KEY: ${{ secrets.ALPHA_SSH_KEY }}
+          ALPHA_HOST: ${{ vars.ALPHA_HOST }}
+          ALPHA_PORT: ${{ vars.ALPHA_PORT || '22' }}
+        run: |
+          set -euo pipefail
+          [ -n "$ALPHA_SSH_KEY" ] || { echo "::error::ALPHA_SSH_KEY is not set"; exit 1; }
+          [ -n "$ALPHA_HOST" ] || { echo "::error::ALPHA_HOST is not set"; exit 1; }
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$ALPHA_SSH_KEY" > ~/.ssh/alpha
+          chmod 600 ~/.ssh/alpha
+          ssh-keyscan -p "$ALPHA_PORT" "$ALPHA_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+      - name: Sync stack
+        env:
+          ALPHA_HOST: ${{ vars.ALPHA_HOST }}
+          ALPHA_USER: ${{ vars.ALPHA_USER || 'root' }}
+          ALPHA_PORT: ${{ vars.ALPHA_PORT || '22' }}
+        run: |
+          set -euo pipefail
+          rsync -az --delete \
+            --exclude '.env' --exclude 'data/' --exclude 'workspace/' --exclude 'images/autobot/bin/' \
+            -e "ssh -i ~/.ssh/alpha -o BatchMode=yes -p $ALPHA_PORT" \
+            services/agent/ "$ALPHA_USER@$ALPHA_HOST:/opt/wckd-agent/"
+      - name: Pull and restart
+        env:
+          ALPHA_HOST: ${{ vars.ALPHA_HOST }}
+          ALPHA_USER: ${{ vars.ALPHA_USER || 'root' }}
+          ALPHA_PORT: ${{ vars.ALPHA_PORT || '22' }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          owner="$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')"
+          ssh -i ~/.ssh/alpha -o BatchMode=yes -p "$ALPHA_PORT" "$ALPHA_USER@$ALPHA_HOST" \
+            "cd /opt/wckd-agent && test -f .env && \
+             AUTOBOT_IMAGE=ghcr.io/$owner/wckd-autobot:${{ github.sha }} \
+             PANEL_IMAGE=ghcr.io/$owner/wckd-agent-panel:${{ github.sha }} \
+             docker compose pull && \
+             AUTOBOT_IMAGE=ghcr.io/$owner/wckd-autobot:${{ github.sha }} \
+             PANEL_IMAGE=ghcr.io/$owner/wckd-agent-panel:${{ github.sha }} \
+             docker compose up -d --no-build --remove-orphans && docker compose ps"
+      - name: Health
+        env:
+          ALPHA_DOMAIN: ${{ vars.ALPHA_DOMAIN }}
+        run: |
+          set -euo pipefail
+          for i in 1 2 3 4 5 6; do
+            if curl -fsS --max-time 10 "https://$ALPHA_DOMAIN/healthz"; then exit 0; fi
+            sleep 10
+          done
+          echo "::error::panel health check did not pass"
+          exit 1

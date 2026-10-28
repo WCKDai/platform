@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Sign in · Invincible control</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body class="login-body">
+  <main class="login">
+    <a class="brand" href="/" aria-label="Invincible control">
+      <span class="mark">I</span>
+      <span>invincible<span class="slash">/</span>control</span>
+    </a>
+    <p class="kicker">WCKD · self-hosted intelligence</p>
+    <h1>Welcome back.</h1>
+    <p class="lede">One password. No account, no email, no third party.</p>
+    <form method="post" action="/login" class="login-form">
+      <label for="password">Operator password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" autofocus required>
+      <p class="error" role="alert">{{ERROR}}</p>
+      <button class="primary" type="submit">Enter</button>
+    </form>
+    <p class="muted small">The panel is bound to this node. Model keys stay in the gateway; sessions stay in Autobot.</p>
+  </main>
+</body>
+</html>

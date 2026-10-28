@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Invincible control</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="/" aria-label="Invincible control">
+      <span class="mark">I</span>
+      <span>invincible<span class="slash">/</span>control</span>
+    </a>
+    <div class="top-right">
+      <span id="status" class="status">connecting</span>
+      <button id="logout" class="ghost" type="button">Sign out</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div>
+        <p class="kicker">WCKD · self-hosted intelligence</p>
+        <h1>One node.<br><span>Every agent.</span></h1>
+        <p class="lede">The gateway routes and receipts every model call. Autobot does the work. This is the room where you watch, approve and steer.</p>
+      </div>
+      <div class="hero-meta">
+        <div><span>panel</span><strong>{{VERSION}}</strong></div>
+        <div><span>refresh</span><strong id="updated">—</strong></div>
+      </div>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <div class="card-head"><h2>Gateway</h2><span id="gateway-state" class="badge">—</span></div>
+        <div id="gateway-node" class="muted">reading the node…</div>
+        <div id="models" class="models"></div>
+      </article>
+
+      <article class="card">
+        <div class="card-head"><h2>Agent</h2><span id="agent-state" class="badge">—</span></div>
+        <div class="stats">
+          <div><span>tasks</span><strong id="stat-tasks">—</strong></div>
+          <div><span>sessions</span><strong id="stat-sessions">—</strong></div>
+          <div><span>waiting</span><strong id="stat-waiting">—</strong></div>
+        </div>
+        <div id="agent-info" class="muted">reading the agent…</div>
+      </article>
+
+      <article class="card wide">
+        <div class="card-head"><h2>Approvals</h2><span class="badge quiet">one key to answer</span></div>
+        <div id="approvals" class="list"><p class="muted">Nothing waiting.</p></div>
+      </article>
+
+      <article class="card wide">
+        <div class="card-head"><h2>Run a task</h2><span class="badge quiet">streamed</span></div>
+        <form id="task-form" class="task">
+          <label for="task-text">What should Autobot do?</label>
+          <textarea id="task-text" rows="3" maxlength="8000" placeholder="Fix the failing test in checkout.py and run it once." required></textarea>
+          <div class="row">
+            <input id="task-session" type="text" maxlength="80" placeholder="session (optional)" autocomplete="off" spellcheck="false">
+            <button class="primary" type="submit" id="task-run">Run</button>
+          </div>
+        </form>
+        <pre id="task-output" class="output" aria-live="polite"></pre>
+      </article>
+
+      <article class="card wide">
+        <div class="card-head"><h2>Sessions</h2><span class="badge quiet">newest first</span></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Conversation</th><th>Bot</th><th>Last turn</th></tr></thead>
+            <tbody id="sessions"><tr><td colspan="3" class="muted">Reading conversations…</td></tr></tbody>
+          </table>
+        </div>
+      </article>
+
+      <article class="card wide">
+        <div class="card-head"><h2>History</h2><span id="history-name" class="badge quiet">pick a session</span></div>
+        <pre id="history" class="output tall">Choose a conversation above.</pre>
+      </article>
+
+      <article class="card wide">
+        <div class="card-head"><h2>Receipts</h2><span class="badge quiet">gateway audit</span></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>API</th><th>Decision</th><th>When</th></tr></thead>
+            <tbody id="audit"><tr><td colspan="3" class="muted">Reading the audit log…</td></tr></tbody>
+          </table>
+        </div>
+      </article>
+    </section>
+
+    <footer>
+      <span>Invincible keeps the keys. The panel never sees a model provider key.</span>
+      <span id="footer-status">—</span>
+    </footer>
+  </main>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

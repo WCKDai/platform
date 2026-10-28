@@ -1,0 +1,99 @@
+# WCKD agent stack: Autobot + the authenticated control panel, behind Caddy.
+#
+# Invincible stays the gateway: point GATEWAY_URL at the node that runs it.  Keeping the
+# model server out of this compose file means the agent can be redeployed without moving
+# a 15 GB model or restarting the thing that serves every other model call.
+#
+#   cp .env.example .env
+#   panel/scripts/hash-password.mjs '...'   # put in PANEL_PASSWORD_HASH
+#   scripts/fetch-linux-binaries.sh v0.0.21
+#   docker compose up -d --build
+#
+name: wckd-agent
+
+services:
+  agent:
+    image: ${AUTOBOT_IMAGE:-wckd/autobot:local}
+    build:
+      context: ./images/autobot
+    restart: unless-stopped
+    environment:
+      AUTOBOT_HOME: /data
+      INVINCIBLE_HOME: /invincible
+      GATEWAY_URL: ${GATEWAY_URL:-http://host.docker.internal:7777/v1}
+      APPROVALS_MODE: ${APPROVALS_MODE:-auto}
+      AGENT_WORKDIR: /workspace
+    volumes:
+      - agent-data:/data
+      - ${INVINCIBLE_DATA:-./data/invincible}:/invincible:ro
+      - ${WORKSPACE:-./workspace}:/workspace
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - internal
+    expose:
+      - "7792"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  panel:
+    image: ${PANEL_IMAGE:-wckd/agent-panel:local}
+    build:
+      context: ./panel
+    restart: unless-stopped
+    environment:
+      PORT: "7800"
+      PANEL_BIND: 0.0.0.0
+      GATEWAY_URL: ${GATEWAY_URL:-http://host.docker.internal:7777/v1}
+      AGENT_URL: http://agent:7792
+      INVINCIBLE_TOKEN: ${INVINCIBLE_TOKEN:?set INVINCIBLE_TOKEN}
+      PANEL_PASSWORD_HASH: ${PANEL_PASSWORD_HASH:?set PANEL_PASSWORD_HASH}
+      PANEL_SECRET: ${PANEL_SECRET:?set PANEL_SECRET}
+      PANEL_SECURE_COOKIES: ${PANEL_SECURE_COOKIES:-true}
+    depends_on:
+      agent:
+        condition: service_healthy
+    networks:
+      - internal
+    expose:
+      - "7800"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    depends_on:
+      - panel
+    environment:
+      PANEL_DOMAIN: ${PANEL_DOMAIN:?set PANEL_DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - internal
+      - web
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  internal:
+    internal: true
+  web:
+
+volumes:
+  agent-data:
+  caddy-data:
+  caddy-config:
