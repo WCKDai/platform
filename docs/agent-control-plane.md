@@ -16,6 +16,32 @@ approvals and sessions; the **panel** is the human surface.
 | **Autobot** | A local-first agent with tools, approvals, a team, a board, skills, schedules, channels, receipts through the gateway, and a per-project map. | Not yet a multi-thread, worktree-per-thread control plane. |
 | **Invincible** | One self-hostable gateway for every model, with policy, redaction, signed receipts and an audit log. | Not an agent UI. |
 
+## What T3 Code's internals confirm
+
+T3 Code's own architecture notes are worth copying more than its screenshots:
+
+- **Commands in, events out.** A serialized orchestrator turns typed commands into events; an
+  event sink commits the event, the UI projection, the command receipt and the outbox effect in
+  one transaction. A separate effect worker starts the provider turn and feeds results back as
+  commands. The panel should subscribe to that event stream, not poll JSONL files.
+- **Provider adapters declare capabilities.** Fork, rollback, steering and subagents are turned
+  off when a provider cannot do them; the UI does not pretend. Autobot should expose the same
+  capability flags, especially when it drives external CLIs.
+- **A checkpoint is a hidden git ref.** Every turn can be diffed and restored without a second
+  database. A thread is therefore a conversation plus a Git history, not just a transcript.
+- **Queued messages are durable.** Queue versus steer is a user setting; a held queue survives a
+  restart and has an explicit Resume. This is the behaviour our panel's task box should grow into.
+- **Approval authority is separate from the agent.** T3 Tots never decides an approval by reading
+  its text, never auto-accepts in delegated mode, and declines with a redirect that tells the
+  thread to use a safer path. That is the rule for Autobot's delegated mode too.
+- **Usage limits are a state, not an error.** A thread records the reset time, can arm resume, and
+  the phone/web client sees "Limited" until then.
+
+T3 Tots adds the operational layer around that: routine answers, one nudge per stall, a single
+`queue --resume` for a held queue, webhooks for `request.opened/resolved` and
+`thread.finished/failed/cancelled`, and an explicit "I'm away, keep it moving" handover. The
+important part is not the Grok bot; it is that delegated work is bounded, visible and reversible.
+
 ## The shape to build
 
 ```text
