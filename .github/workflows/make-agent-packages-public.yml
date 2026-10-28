@@ -1,0 +1,34 @@
+name: Make agent packages public
+
+# One-off: GitHub Container Registry packages default to private. The alpha Coolify worker has no
+# registry credential, so the three agent-stack images are made anonymously pullable instead.
+# Run after agent-stack.yml has published them.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  public:
+    name: Public packages
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set visibility
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          for p in wckd-autobot wckd-agent-panel wckd-invincible-gateway; do
+            for base in "orgs/WCKDai" "user"; do
+              code="$(curl -sS -o /tmp/out -w '%{http_code}' --max-time 30 -X PATCH \
+                -H "Authorization: Bearer $GH_TOKEN" \
+                -H "Accept: application/vnd.github+json" \
+                -d '{"visibility":"public"}' \
+                "https://api.github.com/$base/packages/container/$p")"
+              echo "$p ($base): HTTP $code $(head -c 300 /tmp/out)"
+              [ "$code" = "204" ] && break
+            done
+          done
