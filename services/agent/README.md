@@ -153,15 +153,20 @@ the host, run `docker compose up -d --build` with `images/autobot/bin/autobot` p
   design: the gateway runs in its own container and the models come from LiteLLM.
 - A first task from the panel, then `docker compose logs -f agent panel caddy`.
 
-The alpha stack is deployed through Coolify at
+The 0.0.23 alpha stack is deployed through Coolify at
 `https://agent.invincible.sh` and was verified on 2026-10-28:
 
-- all three containers healthy (`gateway`, `agent`, `panel`);
-- Let's Encrypt certificate on the public domain;
+- all three containers healthy (`gateway`, `agent`, `panel`); both binaries report `0.0.23`;
+- Let's Encrypt on the origin and a Cloudflare edge certificate on the public name;
 - login 303, dashboard and `/api/overview` 200, a missing CSRF token 403, logout 200;
-- an answer turn returned `alpha` with a gateway receipt;
-- a tool turn ran `printf 'ok' > alpha-ok.txt`, wrote the file in the agent's `/workspace`, and
-  returned the tool event plus the receipt.
+- the panel's rooms load: Overview, Chat, Workspaces, Bots, Integrations, Usage and Settings;
+- an answer turn returned `alpha` with a gateway receipt; a tool turn wrote a file in `/workspace`;
+- a thread was created from the project in `/workspace`, a tool task wrote inside its worktree,
+  the panel showed the diff, and **PR** committed and pushed the branch (a local remote, so the
+  result said it was not GitHub); the thread was then removed;
+- Playwright drove the chat and thread flows with no page errors.
 
-The panel password, gateway token and session secret are in the Coolify application's
-**Environment** tab. The test file and session were cleaned up; the panel login was logged out.
+`/workspace` holds a clone of the public `WCKDai/platform` repository as the working demo
+project; replace it with the project the bot should work on. The panel password, gateway token
+and session secret are in the Coolify application's **Environment** tab. Test files and sessions
+were cleaned up; the panel login was logged out.
