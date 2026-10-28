@@ -76,6 +76,12 @@ or the gated **agent-stack** workflow in `.github/workflows/agent-stack.yml` (en
 builds the panel and agent images, pushes them to GHCR, then pulls and restarts on the host. The
 deploy job is skipped unless `ALPHA_DEPLOY` is explicitly true.
 
+The images are private by default. Set `GHCR_TOKEN` (a token with `read:packages`) and
+`GHCR_USER` in the alpha environment, or make the two packages public, then the workflow (or
+`GHCR_TOKEN=... GHCR_USER=... ./scripts/deploy-alpha.sh`) logs in before `docker compose pull`.
+If you prefer to build on the host, run `docker compose up -d --build` with
+`images/autobot/bin/autobot` present.
+
 ## Verification
 
 - `docker compose config` — required values and network wiring.

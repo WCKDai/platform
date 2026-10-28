@@ -116,9 +116,15 @@ jobs:
           ALPHA_USER: ${{ vars.ALPHA_USER || 'root' }}
           ALPHA_PORT: ${{ vars.ALPHA_PORT || '22' }}
           OWNER: ${{ github.repository_owner }}
+          GHCR_USER: ${{ vars.GHCR_USER || github.actor }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
         run: |
           set -euo pipefail
           owner="$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')"
+          if [ -n "$GHCR_TOKEN" ]; then
+            printf '%s' "$GHCR_TOKEN" | ssh -i ~/.ssh/alpha -o BatchMode=yes -p "$ALPHA_PORT" "$ALPHA_USER@$ALPHA_HOST" \
+              "docker login ghcr.io -u '$GHCR_USER' --password-stdin"
+          fi
           ssh -i ~/.ssh/alpha -o BatchMode=yes -p "$ALPHA_PORT" "$ALPHA_USER@$ALPHA_HOST" \
             "cd /opt/wckd-agent && test -f .env && \
              AUTOBOT_IMAGE=ghcr.io/$owner/wckd-autobot:${{ github.sha }} \

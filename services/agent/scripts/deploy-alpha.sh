@@ -32,6 +32,11 @@ rsync -az --delete \
   -e "ssh -o BatchMode=yes -p $ALPHA_PORT" \
   ./ "$TARGET:$REMOTE_DIR/"
 
+if [ -n "${GHCR_TOKEN:-}" ]; then
+  echo "==> logging in to GHCR on $TARGET"
+  printf '%s' "$GHCR_TOKEN" | $SSH "$TARGET" "docker login ghcr.io -u '${GHCR_USER:-$ALPHA_USER}' --password-stdin"
+fi
+
 echo "==> checking the remote environment"
 $SSH "$TARGET" "cd '$REMOTE_DIR' && test -f .env || { echo 'missing $REMOTE_DIR/.env; copy .env.example and fill it on the host' >&2; exit 1; }"
 
