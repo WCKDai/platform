@@ -16,7 +16,7 @@ const GATEWAY = (process.env.GATEWAY_HTTP_URL || process.env.GATEWAY_URL || "htt
   .replace(/\/v1\/?$/, "")
   .replace(/\/+$/, "");
 const AGENT = (process.env.AGENT_URL || "http://127.0.0.1:7792").replace(/\/+$/, "");
-const TOKEN = (process.env.INVINCIBLE_TOKEN || "").trim();
+const TOKEN = (process.env.INVINCIBLE_TOKEN || tokenFromFile() || "").trim();
 const SECRET = process.env.PANEL_SECRET || "";
 const PASSWORD = process.env.PANEL_PASSWORD || "";
 const PASSWORD_HASH = process.env.PANEL_PASSWORD_HASH || "";
@@ -37,6 +37,16 @@ const STATIC = {
   "/app.css": ["app.css", "text/css; charset=utf-8"],
   "/app.js": ["app.js", "text/javascript; charset=utf-8"],
 };
+
+function tokenFromFile() {
+  const file = process.env.INVINCIBLE_TOKEN_FILE;
+  if (!file) return "";
+  try {
+    return readFileSync(file, "utf8");
+  } catch (error) {
+    fail(`cannot read INVINCIBLE_TOKEN_FILE ${file}: ${error.message}`);
+  }
+}
 
 function fail(message) {
   console.error(`panel: ${message}`);

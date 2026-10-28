@@ -1,0 +1,177 @@
+name: Deploy agent panel
+
+# Creates (or reuses) the `agent-panel` docker-compose application in the PolyCore Coolify
+# project, points it at the existing LiteLLM gateway, and deploys it. One job: the Coolify token
+# and the LiteLLM key both live in the `infra` environment.
+#
+# The public panel gets an `agent.<server-ip>.sslip.io` domain unless AGENT_PANEL_DOMAIN is set.
+# Coolify generates the gateway token, the panel password and the session secret; they are visible
+# in the application's Environment tab, never in this log.
+
+on:
+  workflow_dispatch:
+    inputs:
+      domain:
+        description: "Public panel URL (blank: agent.<server-ip>.sslip.io)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-agent-panel
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy agent panel
+    runs-on: ubuntu-latest
+    environment: infra
+    timeout-minutes: 30
+    steps:
+      - name: Check gate
+        if: vars.INFRA_CONFIGURED != 'true'
+        run: |
+          echo "::error::INFRA_CONFIGURED is not true; refusing to call Coolify"
+          exit 1
+
+      - name: Find or create the application
+        env:
+          COOLIFY_URL: ${{ vars.COOLIFY_URL }}
+          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
+          PROJECT_UUID: ${{ vars.COOLIFY_PROJECT_UUID }}
+          SERVER_UUID: ${{ vars.COOLIFY_SERVER_UUID }}
+          ENVIRONMENT: ${{ vars.COOLIFY_ENVIRONMENT_NAME }}
+        run: |
+          set -euo pipefail
+          base="${COOLIFY_URL%/}/api/v1"
+          auth=(-H "Authorization: Bearer $COOLIFY_API_TOKEN" -H "Accept: application/json")
+          apps="$(curl -fsS --max-time 30 "${auth[@]}" "$base/applications")"
+          uuid="$(jq -r '.[]? | select(.name == "agent-panel") | .uuid' <<<"$apps" | head -1)"
+          if [ -z "$uuid" ]; then
+            body="$(jq -n \
+              --arg project "$PROJECT_UUID" \
+              --arg server "$SERVER_UUID" \
+              --arg env "$ENVIRONMENT" \
+              '{
+                project_uuid: $project,
+                server_uuid: $server,
+                environment_name: $env,
+                git_repository: "https://github.com/WCKDai/platform",
+                git_branch: "main",
+                build_pack: "dockercompose",
+                docker_compose_location: "/services/agent/docker-compose.coolify.yml",
+                name: "agent-panel",
+                description: "Invincible gateway, Autobot agent and authenticated control panel",
+                ports_exposes: "7800",
+                instant_deploy: false
+              }')"
+            response="$(curl -sS -w '\n%{http_code}' --max-time 60 -X POST \
+              "${auth[@]}" -H "Content-Type: application/json" -d "$body" "$base/applications/public")"
+            code="$(tail -n 1 <<<"$response")"
+            payload="$(sed '$d' <<<"$response")"
+            if [ "$code" != "201" ]; then
+              echo "::error::creating the application returned HTTP $code: $payload"
+              exit 1
+            fi
+            uuid="$(jq -r '.uuid' <<<"$payload")"
+            echo "created application $uuid"
+          else
+            echo "reusing application $uuid"
+          fi
+          echo "APP_UUID=$uuid" >>"$GITHUB_ENV"
+          server="$(curl -fsS --max-time 30 "${auth[@]}" "$base/servers/$SERVER_UUID")"
+          echo "SERVER_IP=$(jq -r '.ip // .ipv4 // empty' <<<"$server")" >>"$GITHUB_ENV"
+          jq '{name, ip, ipv4}' <<<"$server" || true
+
+      - name: Set the public domain
+        env:
+          COOLIFY_URL: ${{ vars.COOLIFY_URL }}
+          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
+          WANTED: ${{ inputs.domain }}
+        run: |
+          set -euo pipefail
+          domain="${WANTED:-}"
+          if [ -z "$domain" ]; then
+            [ -n "${SERVER_IP:-}" ] || { echo "::error::the Coolify server has no public IPv4; set the workflow domain input"; exit 1; }
+            domain="https://agent.${SERVER_IP}.sslip.io"
+          fi
+          case "$domain" in https://*) ;; *) domain="https://$domain" ;; esac
+          echo "DOMAIN=$domain" >>"$GITHUB_ENV"
+          body="$(jq -n --arg d "$domain" '{docker_compose_domains:[{name:"panel",domain:$d}]}')"
+          response="$(curl -sS -w '\n%{http_code}' --max-time 30 -X PATCH \
+            -H "Authorization: Bearer $COOLIFY_API_TOKEN" -H "Content-Type: application/json" \
+            -d "$body" "${COOLIFY_URL%/}/api/v1/applications/$APP_UUID")"
+          code="$(tail -n 1 <<<"$response")"
+          echo "domain: HTTP $code $domain"
+          [ "$code" = "200" ] || [ "$code" = "201" ] || exit 1
+
+      - name: Write the application environment
+        env:
+          COOLIFY_URL: ${{ vars.COOLIFY_URL }}
+          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
+          CLOUD_BASE_URL: ${{ vars.AGENT_CLOUD_BASE_URL || 'https://llm.polykrom.app/v1' }}
+          CLOUD_MODEL: ${{ vars.AGENT_CLOUD_MODEL || 'cheap' }}
+          CLOUD_API_KEY: ${{ secrets.LITELLM_MASTER_KEY }}
+          CLOUD_CONTEXT: ${{ vars.AGENT_CLOUD_CONTEXT || '65536' }}
+        run: |
+          set -euo pipefail
+          [ -n "$CLOUD_API_KEY" ] || { echo "::error::LITELLM_MASTER_KEY is not set in infra"; exit 1; }
+          base="${COOLIFY_URL%/}/api/v1"
+          for name in CLOUD_BASE_URL CLOUD_MODEL CLOUD_API_KEY CLOUD_CONTEXT; do
+            value="${!name}"
+            body="$(jq -n --arg k "$name" --arg v "$value" '{data:[{key:$k,value:$v}]}')"
+            code="$(curl -sS -o /tmp/out -w '%{http_code}' --max-time 30 -X PATCH \
+              -H "Authorization: Bearer $COOLIFY_API_TOKEN" -H "Content-Type: application/json" \
+              -d "$body" "$base/applications/$APP_UUID/envs/bulk" || true)"
+            if [ "$code" != "200" ] && [ "$code" != "201" ]; then
+              echo "::error::setting $name returned HTTP $code: $(cat /tmp/out)"
+              exit 1
+            fi
+            echo "set $name"
+          done
+
+      - name: Deploy
+        env:
+          COOLIFY_URL: ${{ vars.COOLIFY_URL }}
+          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          response="$(curl -sS -w '\n%{http_code}' --max-time 60 -X POST \
+            -H "Authorization: Bearer $COOLIFY_API_TOKEN" -H "Accept: application/json" \
+            "${COOLIFY_URL%/}/api/v1/deploy?uuid=$APP_UUID")"
+          code="$(tail -n 1 <<<"$response")"
+          echo "deploy: HTTP $code $(sed '$d' <<<"$response")"
+          [ "$code" = "200" ] || [ "$code" = "201" ] || exit 1
+
+      - name: Wait for the application
+        env:
+          COOLIFY_URL: ${{ vars.COOLIFY_URL }}
+          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 90); do
+            status="$(curl -fsS --max-time 30 \
+              -H "Authorization: Bearer $COOLIFY_API_TOKEN" -H "Accept: application/json" \
+              "${COOLIFY_URL%/}/api/v1/applications/$APP_UUID" | jq -r '.status // "unknown"')"
+            echo "attempt $i: $status"
+            [ "$status" = "running:healthy" ] && exit 0
+            sleep 10
+          done
+          echo "::error::timed out waiting for the application"
+          exit 1
+
+      - name: Health
+        env:
+          COOLIFY_URL: ${{ vars.COOLIFY_URL }}
+          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          echo "panel: $DOMAIN"
+          for i in $(seq 1 30); do
+            if curl -fsS --max-time 10 "$DOMAIN/healthz"; then exit 0; fi
+            sleep 10
+          done
+          echo "::error::panel health check did not pass at $DOMAIN"
+          exit 1

@@ -59,7 +59,34 @@ The Autobot API is not published to the host. The panel proxies the read and app
 needs; it never exposes `/v1/agent` directly and never returns the gateway token. See
 [`panel/README.md`](panel/README.md) for the panel's routes and security model.
 
-## Deploying to the alpha host
+## Deploy through Coolify (the alpha path)
+
+The platform's `infra` environment holds the Coolify server and project variables for PolyCore and
+Polykrom. The `deploy-agent-coolify` workflow uses them; no local SSH or Hetzner token is needed:
+
+```sh
+gh workflow run deploy-agent-coolify.yml -R WCKDai/platform --ref main
+# optionally: -f domain=agent.example.com
+```
+
+It creates (or reuses) the `agent-panel` Docker Compose application in the PolyCore project from
+`services/agent/docker-compose.coolify.yml`, sets `CLOUD_BASE_URL`, `CLOUD_MODEL` and the LiteLLM
+key, and deploys it. The stack is:
+
+- **gateway:** Invincible, cloud-only, in front of the existing `llm.polykrom.app` LiteLLM gateway;
+- **agent:** Autobot, using the gateway with its own token and `private = false`;
+- **panel:** the authenticated control panel, public through Coolify's Traefik.
+
+Coolify generates the gateway token, panel password and session secret; find them in the
+application's **Environment** tab. The default public URL is
+`https://agent.<server-ip>.sslip.io`; pass the optional `domain` input to use a real domain.
+The workflow waits for `running:healthy` and then checks `/healthz`.
+
+This uses LiteLLM for model access, so it proves the agent + gateway + panel path without a GPU on
+the worker. To use a local model later, replace the gateway service with an engine-bearing image
+and set `GATEWAY_URL` to it; the agent and panel do not change.
+
+## Deploying to a host over SSH
 
 There is no usable `alpha` SSH alias, DNS record, or Hetzner API token on the development machine
 as of 2026-10-28. Do not repurpose an unrelated host: name the target explicitly first.

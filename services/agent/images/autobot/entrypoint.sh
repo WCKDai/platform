@@ -5,6 +5,8 @@ set -eu
 : "${AUTOBOT_HOME:=/data}"
 : "${INVINCIBLE_HOME:=/invincible}"
 : "${GATEWAY_URL:=http://gateway:7777/v1}"
+: "${GATEWAY_MODEL:=auto}"
+: "${GATEWAY_PRIVATE:=false}"
 : "${APPROVALS_MODE:=auto}"
 : "${AGENT_WORKDIR:=/workspace}"
 
@@ -16,7 +18,8 @@ workdir = "$AGENT_WORKDIR"
 
 [gateway]
 url = "$GATEWAY_URL"
-private = true
+model = "$GATEWAY_MODEL"
+private = $GATEWAY_PRIVATE
 
 [approvals]
 mode = "$APPROVALS_MODE"
