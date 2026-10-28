@@ -163,6 +163,24 @@ jobs:
           echo "::error::timed out waiting for the application"
           exit 1
 
+      - name: Collect service logs
+        if: failure()
+        env:
+          COOLIFY_URL: ${{ vars.COOLIFY_URL }}
+          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
+        run: |
+          set -uo pipefail
+          [ -n "${APP_UUID:-}" ] || exit 0
+          for svc in gateway agent panel; do
+            echo "## $svc"
+            curl -sS --max-time 30 \
+              -H "Authorization: Bearer $COOLIFY_API_TOKEN" -H "Accept: application/json" \
+              "${COOLIFY_URL%/}/api/v1/applications/$APP_UUID/logs?lines=40&service_name=$svc" \
+              | jq -r '.logs // .message // empty' \
+              | sed -E 's/[A-Za-z0-9_\/+=-]{40,}/***/g' \
+              | tail -40
+          done
+
       - name: Health
         env:
           COOLIFY_URL: ${{ vars.COOLIFY_URL }}
