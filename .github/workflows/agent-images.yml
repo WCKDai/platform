@@ -47,10 +47,10 @@ jobs:
           set -euo pipefail
           case "$VERSION" in v*) ;; *) echo "::error::version must be a release tag like v0.0.26"; exit 1;; esac
           mkdir -p dist
+          scripts/fetch-linux-binaries.sh "$VERSION" x86_64
           docker build --build-arg "INVINCIBLE_VERSION=$VERSION" \
             -t "wckd-agent-stack/wckd-invincible-gateway:$VERSION" images/gateway
-          docker build --build-arg "INVINCIBLE_VERSION=$VERSION" \
-            -t "wckd-agent-stack/wckd-autobot:$VERSION" images/autobot
+          docker build -t "wckd-agent-stack/wckd-autobot:$VERSION" images/autobot
           docker build -t "wckd-agent-stack/wckd-agent-panel:$VERSION" panel
           for image in wckd-invincible-gateway wckd-autobot wckd-agent-panel; do
             docker save "wckd-agent-stack/$image:$VERSION" | gzip -9 > "dist/$image-$VERSION.tar.gz"
