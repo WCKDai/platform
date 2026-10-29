@@ -210,10 +210,10 @@ the alpha/local installs move to the same binaries.
 
 **Deployed on 2026-10-29:** the alpha panel at
 [`agent.invincible.sh`](https://agent.invincible.sh) runs the gateway, Autobot and panel together
-in the PolyCore Coolify project, now at **0.0.30** (panel 0.1.5). All three are healthy; login,
+in the PolyCore Coolify project, now at **0.0.31** (panel 0.1.5). All three are healthy; login,
 CSRF, overview, brief and plan, **Delegations**, **Project**, and a cloud provider added from
 **Providers**, hot-loaded into the model list and removed again, were verified. The images are
-**public, signed release tarballs** (`agent-images-v0.0.30`) verified on the host and loaded
+**public, signed release tarballs** (`agent-images-v0.0.31`) verified on the host and loaded
 locally; the compose uses `pull_policy: never`, so no registry (loopback or GHCR) is in the alpha
 path. GHCR packages remain optional for internal CI. The test brief, plan, session and provider
 were removed after verification; the gateway config is back to the one `cheap` provider.
