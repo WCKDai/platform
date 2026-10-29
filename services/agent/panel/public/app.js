@@ -1,6 +1,19 @@
 const $ = (id) => document.getElementById(id);
-const VIEWS = ["overview", "chat", "workspaces", "bots", "integrations", "usage", "settings"];
+const VIEWS = ["overview", "chat", "workspaces", "bots", "providers", "secrets", "variables", "subscriptions", "integrations", "usage", "settings"];
 const CHANNELS = ["telegram", "discord", "slack", "email", "signal", "matrix", "whatsapp"];
+const PAGE_META = {
+  overview: ["Overview", "The node, the agent, and what needs you."],
+  chat: ["Chat", "A conversation with Autobot. Tools, receipts and approvals stay in the transcript."],
+  workspaces: ["Workspaces", "Parallel worktrees, diffs and pull requests."],
+  bots: ["Agents", "Bots, their models, approvals and channels."],
+  providers: ["Providers", "Gateway models and the agent CLIs installed on this machine."],
+  secrets: ["Secrets", "Write-only credentials for connectors and hooks."],
+  variables: ["Variables", "Non-secret context added to every turn."],
+  subscriptions: ["Subscriptions", "Plans, renewals and monthly spend."],
+  integrations: ["Integrations", "Channels, MCP servers and incoming webhooks."],
+  usage: ["Usage", "Tokens, cost, models, tools and gateway receipts."],
+  settings: ["Settings", "Approval policy, tools and advanced configuration."],
+};
 let csrf = "";
 let busy = false;
 let timer = 0;
@@ -10,6 +23,12 @@ let threads = [];
 let bots = [];
 let settings = {};
 let overview = {};
+let variables = [];
+let subscriptions = [];
+let providerList = [];
+let secretList = [];
+let paletteIndex = 0;
+let currentView = "overview";
 
 const esc = (value) =>
   String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
@@ -69,8 +88,15 @@ function value(section) {
 function showView(name) {
   if (!VIEWS.includes(name)) name = "overview";
   for (const view of document.querySelectorAll(".view")) view.hidden = view.dataset.view !== name;
-  for (const tab of document.querySelectorAll("#tabs button")) tab.classList.toggle("active", tab.dataset.view === name);
+  for (const tab of document.querySelectorAll("#nav button")) tab.classList.toggle("active", tab.dataset.view === name);
+  currentView = name;
+  const [title, subtitle] = PAGE_META[name] || PAGE_META.overview;
+  $("page-title").textContent = title;
+  $("page-subtitle").textContent = subtitle;
+  document.title = `${title} · Invincible Control`;
   if (location.hash.slice(1) !== name) history.replaceState(null, "", name === "overview" ? location.pathname : `#${name}`);
+  if (name === "providers") loadProviders();
+  window.scrollTo({ top: 0, behavior: "instant" });
 }
 
 function renderGateway(gateway) {
@@ -79,9 +105,14 @@ function renderGateway(gateway) {
   const ok = !unavailable(gateway?.models) && !unavailable(gateway?.node);
   $("gateway-state").textContent = ok ? "online" : "offline";
   $("gateway-state").className = `badge${ok ? "" : " bad"}`;
-  $("gateway-node").textContent = ok
-    ? `${node.name || "node"} · ${models.length} model(s) · ${(node.speech || []).length} speech · ${(node.images || []).length} image`
-    : "The gateway did not answer.";
+  if (ok) {
+    const bits = [`${models.length} model(s)`];
+    if ((node.speech || []).length) bits.push(`${node.speech.length} speech`);
+    if ((node.images || []).length) bits.push(`${node.images.length} image`);
+    $("gateway-node").textContent = `${node.name || "node"} · ${bits.join(" · ")}`;
+  } else {
+    $("gateway-node").textContent = "The gateway did not answer.";
+  }
   $("models").innerHTML = models.length
     ? models
         .map((model) => {
@@ -139,10 +170,19 @@ function renderSessions(agent) {
         .slice(0, 50)
         .map(
           (session) =>
-            `<tr data-session="${esc(session.id)}" class="${session.id === selectedSession ? "active" : ""}"><td class="mono">${esc(session.id)}</td><td>${esc(session.bot || "default")}</td><td class="muted">${esc(when(session.modified))}</td></tr>`,
+            `<button type="button" class="conversation ${session.id === selectedSession ? "active" : ""}" data-session="${esc(session.id)}"><span class="name">${esc(session.id)}</span><span class="sub">${esc(session.bot || "default")} · ${esc(when(session.modified))}</span></button>`,
         )
         .join("")
-    : `<tr><td colspan="3" class="muted">No conversations yet.</td></tr>`;
+    : `<p class="muted">No conversations yet.</p>`;
+  $("recent").innerHTML = sessions.length
+    ? sessions
+        .slice(0, 6)
+        .map(
+          (session) =>
+            `<div class="row-item"><button type="button" class="linkish" data-session="${esc(session.id)}">${esc(session.id)}</button><span class="meta">${esc(session.bot || "default")} · ${esc(when(session.modified))}</span></div>`,
+        )
+        .join("")
+    : `<p class="muted">No conversations yet.</p>`;
 }
 
 function messageBubble(message) {
@@ -244,6 +284,7 @@ async function loadHistory(id) {
   live = null;
   $("chat-session").value = id;
   $("chat-title").textContent = id;
+  $("chat-session-label").textContent = "saved";
   $("chat").innerHTML = `<p class="muted">Loading ${esc(id)}…</p>`;
   try {
     const response = await api(`/api/history/${encodeURIComponent(id)}`);
@@ -377,6 +418,7 @@ async function runChat(event) {
       selectedSession = assigned;
       $("chat-session").value = assigned;
       $("chat-title").textContent = assigned;
+      $("chat-session-label").textContent = "saved";
     }
     if (!response.ok || !response.body) {
       const body = await response.text();
@@ -408,8 +450,11 @@ async function runChat(event) {
   } finally {
     busy = false;
     live = null;
-    button.disabled = false;
-    await refresh();
+    try {
+      await refresh();
+    } finally {
+      button.disabled = false;
+    }
   }
 }
 
@@ -417,8 +462,9 @@ function newChat() {
   selectedSession = "";
   live = null;
   $("chat-session").value = "";
-  $("chat-title").textContent = "new conversation";
-  $("chat").innerHTML = `<p class="muted">Pick a conversation, or start a new one.</p>`;
+  $("chat-title").textContent = "New conversation";
+  $("chat-session-label").textContent = "not saved yet";
+  $("chat").innerHTML = `<p class="muted">Pick a conversation, or ask Autobot to do something.</p>`;
   showView("chat");
   $("chat-text").focus();
 }
@@ -660,6 +706,7 @@ async function saveSecret(event) {
     if (!response.ok) throw new Error(result.error?.message || result.error || `HTTP ${response.status}`);
     $("secret-output").textContent = `wrote ${result.file} (mode 0600); enable the channel with a connector toggle.`;
     $("secret-value").value = "";
+    toast(`${result.file} saved`, "good");
     await refresh();
   } catch (error) {
     $("secret-output").textContent = String(error.message || error);
@@ -756,6 +803,7 @@ function renderSettings(section, agent, gateway) {
     ["workdir", data.agent?.workdir],
     ["sandbox", data.agent?.sandbox],
     ["max steps", data.agent?.max_steps],
+    ["check", data.agent?.check || "none"],
     ["context", data.agent?.context_kib ? `${data.agent.context_kib} KiB` : "default"],
     ["serve", data.serve],
   ]
@@ -782,6 +830,7 @@ async function setModel() {
     const result = await response.json();
     if (!response.ok) throw new Error(result.error?.message || result.error || `HTTP ${response.status}`);
     $("config-output").textContent = result.said || `model set to ${model}`;
+    toast(result.said || `Model set to ${model}`, "good");
     await refresh();
   } catch (error) {
     $("config-output").textContent = String(error.message || error);
@@ -855,6 +904,281 @@ async function answerApproval(id, answer) {
   }
 }
 
+async function write(path, options = {}) {
+  const response = await api(path, options);
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error?.message || data.error || data.message || `HTTP ${response.status}`);
+  return data;
+}
+
+function toast(message, kind = "") {
+  const node = document.createElement("div");
+  node.className = `toast ${kind}`;
+  node.textContent = message;
+  $("toasts").append(node);
+  setTimeout(() => node.remove(), 4500);
+}
+
+function money(amount, currency = "USD") {
+  return `${currency || "USD"} ${Number(amount || 0).toFixed(2)}`;
+}
+
+function bytes(size) {
+  const n = Number(size || 0);
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KiB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MiB`;
+}
+
+function renderVariables(section) {
+  variables = value(section)?.variables || [];
+  $("variables").innerHTML = variables.length
+    ? variables
+        .map(
+          (variable) =>
+            `<tr><td class="mono">${esc(variable.key)}</td><td>${esc(String(variable.value || "").slice(0, 160))}</td><td class="muted">${esc(variable.description || "—")}</td><td class="muted">${esc(when(variable.updated_at))}</td><td><button class="mini no" type="button" data-variable="${esc(variable.key)}">Remove</button></td></tr>`,
+        )
+        .join("")
+    : `<tr><td colspan="5" class="muted">No variables. Add project names, hosts or conventions above.</td></tr>`;
+}
+
+async function addVariable(event) {
+  event.preventDefault();
+  const key = $("variable-key").value.trim();
+  const valueText = $("variable-value").value;
+  const description = $("variable-description").value.trim();
+  if (!key || !valueText.trim()) return;
+  try {
+    await write("/api/variables", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key, value: valueText, description }),
+    });
+    $("variable-form").reset();
+    $("variable-output").textContent = "";
+    toast(`Variable ${key} saved`, "good");
+    await refresh();
+  } catch (error) {
+    $("variable-output").textContent = String(error.message || error);
+  }
+}
+
+async function removeVariable(key) {
+  if (!confirm(`Remove variable ${key}?`)) return;
+  try {
+    await write(`/api/variables/${encodeURIComponent(key)}`, { method: "DELETE" });
+    toast(`Variable ${key} removed`, "good");
+    await refresh();
+  } catch (error) {
+    toast(String(error.message || error), "bad");
+  }
+}
+
+function renderSubscriptionOverview(section) {
+  const data = value(section);
+  if (!data || !(data.subscriptions || []).length) {
+    $("subscription-overview").innerHTML = `<p class="muted">No plans recorded.</p>`;
+    return;
+  }
+  const totals = (data.totals || []).map((total) => money(total.monthly, total.currency)).join(" · ") || "—";
+  const next = (data.upcoming || [])[0];
+  $("subscription-overview").innerHTML = [
+    `<div class="insight"><strong>Monthly</strong><span>${esc(totals)}</span></div>`,
+    `<div class="insight"><strong>Plans</strong><span>${esc(data.active ?? 0)} active · ${esc(data.all ?? 0)} total</span></div>`,
+    `<div class="insight"><strong>Renewals</strong><span>${next ? `${esc(next.name)} in ${esc(next.days)} d` : "none in 30 days"}</span></div>`,
+  ].join("");
+}
+
+function renderSubscriptions(section) {
+  const data = value(section) || {};
+  subscriptions = data.subscriptions || [];
+  const totals = (data.totals || []).map((total) => money(total.monthly, total.currency)).join(" · ") || "—";
+  const upcoming = data.upcoming || [];
+  $("subscription-summary").innerHTML = [
+    ["active", data.active ?? 0],
+    ["plans", data.all ?? subscriptions.length],
+    ["monthly", totals],
+    ["renewing", upcoming.length ? `${upcoming.length} in 30d` : "none"],
+  ]
+    .map(([label, valueText]) => `<div><span>${esc(label)}</span><strong>${esc(valueText)}</strong></div>`)
+    .join("");
+  $("subscriptions").innerHTML = subscriptions.length
+    ? subscriptions
+        .map((subscription) => {
+          const tone = subscription.status === "active" ? "" : subscription.status === "cancelled" ? "bad" : "quiet";
+          return `<tr><td><strong>${esc(subscription.name)}</strong>${subscription.plan ? `<div class="muted">${esc(subscription.plan)}</div>` : ""}</td><td>${esc(subscription.provider || "—")}</td><td><span class="badge ${tone}">${esc(subscription.status)}</span></td><td class="mono">${esc(money(subscription.monthly_cost, subscription.currency))}</td><td class="muted">${esc(subscription.renews_on || "—")}</td><td>${esc(subscription.seats || 1)}</td><td><div class="thread-actions"><button class="mini" type="button" data-subscription-edit="${esc(subscription.id)}">Edit</button><button class="mini no" type="button" data-subscription-delete="${esc(subscription.id)}">Remove</button></div></td></tr>`;
+        })
+        .join("")
+    : `<tr><td colspan="7" class="muted">No subscriptions. Add the plans you pay for to see the real monthly cost.</td></tr>`;
+  $("subscription-upcoming").innerHTML = upcoming.length
+    ? upcoming
+        .map(
+          (item) =>
+            `<div class="insight"><strong>${esc(item.name)}</strong><span>${esc(item.renews_on)} · in ${esc(item.days)} d</span></div>`,
+        )
+        .join("")
+    : `<p class="muted">No renewals in the next 30 days.</p>`;
+  renderSubscriptionOverview(section);
+}
+
+function editSubscription(id) {
+  const subscription = subscriptions.find((item) => item.id === id);
+  if (!subscription) return;
+  $("subscription-id").value = subscription.id;
+  $("subscription-name").value = subscription.name || "";
+  $("subscription-provider").value = subscription.provider || "";
+  $("subscription-plan").value = subscription.plan || "";
+  $("subscription-status").value = subscription.status || "active";
+  $("subscription-cost").value = subscription.monthly_cost ?? 0;
+  $("subscription-currency").value = subscription.currency || "USD";
+  $("subscription-renew").value = subscription.renews_on || "";
+  $("subscription-seats").value = subscription.seats || 1;
+  $("subscription-url").value = subscription.url || "";
+  $("subscription-notes").value = subscription.notes || "";
+  $("subscription-form-title").textContent = "Edit subscription";
+  $("subscription-cancel").hidden = false;
+  $("subscription-name").focus();
+}
+
+function resetSubscriptionForm() {
+  $("subscription-form").reset();
+  $("subscription-id").value = "";
+  $("subscription-currency").value = "USD";
+  $("subscription-status").value = "active";
+  $("subscription-seats").value = 1;
+  $("subscription-form-title").textContent = "Add a subscription";
+  $("subscription-cancel").hidden = true;
+  $("subscription-output").textContent = "";
+}
+
+async function saveSubscription(event) {
+  event.preventDefault();
+  const payload = {
+    id: $("subscription-id").value,
+    name: $("subscription-name").value.trim(),
+    provider: $("subscription-provider").value.trim(),
+    plan: $("subscription-plan").value.trim(),
+    status: $("subscription-status").value,
+    monthly_cost: Number($("subscription-cost").value || 0),
+    currency: $("subscription-currency").value.trim().toUpperCase(),
+    renews_on: $("subscription-renew").value || null,
+    seats: Number($("subscription-seats").value || 1),
+    url: $("subscription-url").value.trim() || null,
+    notes: $("subscription-notes").value.trim(),
+  };
+  if (!payload.name) return;
+  try {
+    await write("/api/subscriptions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    resetSubscriptionForm();
+    toast(payload.id ? "Subscription updated" : "Subscription added", "good");
+    await refresh();
+  } catch (error) {
+    $("subscription-output").textContent = String(error.message || error);
+  }
+}
+
+async function removeSubscription(id) {
+  const subscription = subscriptions.find((item) => item.id === id);
+  if (!confirm(`Remove ${subscription?.name || id}?`)) return;
+  try {
+    await write(`/api/subscriptions/${encodeURIComponent(id)}`, { method: "DELETE" });
+    if ($("subscription-id").value === id) resetSubscriptionForm();
+    toast("Subscription removed", "good");
+    await refresh();
+  } catch (error) {
+    toast(String(error.message || error), "bad");
+  }
+}
+
+function renderSecrets(section) {
+  secretList = value(section)?.secrets || [];
+  $("secrets").innerHTML = secretList.length
+    ? secretList
+        .map(
+          (secret) =>
+            `<tr><td class="mono">${esc(secret.name)}</td><td><span class="badge quiet">${esc(secret.kind)}</span></td><td class="muted">${esc(bytes(secret.bytes))}</td><td class="muted">${esc(when(secret.updated_at))}</td><td><button class="mini no" type="button" data-secret-delete="${esc(secret.name)}">Remove</button></td></tr>`,
+        )
+        .join("")
+    : `<tr><td colspan="5" class="muted">No secret files yet. Add a connector token or a named secret on the right.</td></tr>`;
+}
+
+async function removeSecret(name) {
+  if (!confirm(`Remove secret file ${name}?`)) return;
+  try {
+    await write(`/api/secrets/${encodeURIComponent(name)}`, { method: "DELETE" });
+    toast(`${name} removed`, "good");
+    await refresh();
+  } catch (error) {
+    toast(String(error.message || error), "bad");
+  }
+}
+
+async function loadProviders() {
+  try {
+    const response = await api("/api/providers");
+    if (!response.ok) throw new Error(`providers ${response.status}`);
+    const data = await response.json();
+    renderAgentProviders(value(data.providers)?.providers || []);
+  } catch (error) {
+    $("agent-providers").innerHTML = `<tr><td colspan="5" class="muted">${esc(error.message || error)}</td></tr>`;
+  }
+}
+
+function renderAgentProviders(providers) {
+  providerList = providers || [];
+  $("agent-providers").innerHTML = providerList.length
+    ? providerList
+        .map(
+          (provider) =>
+            `<tr><td><strong>${esc(provider.name)}</strong><div class="muted mono">${esc(provider.path || provider.command)}</div></td><td class="mono">${esc(provider.version || "—")}</td><td>${esc(provider.auth)}${provider.login ? `<div class="muted">${esc(provider.login)}</div>` : ""}</td><td>${(provider.capabilities || []).map((capability) => `<span class="badge quiet">${esc(capability)}</span>`).join(" ")}</td><td>${provider.installed ? `<span class="bot-status running">installed</span>` : `<span class="bot-status">not found</span>`}</td></tr>`,
+        )
+        .join("")
+    : `<tr><td colspan="5" class="muted">No providers reported.</td></tr>`;
+}
+
+function renderPalette(filter = "") {
+  const items = VIEWS.map((view) => ({ kind: "view", view, label: PAGE_META[view][0], hint: "Section" }));
+  items.push(
+    { kind: "action", action: "new-chat", label: "New chat", hint: "Action" },
+    { kind: "action", action: "refresh", label: "Refresh data", hint: "Action" },
+  );
+  const query = filter.trim().toLowerCase();
+  const matches = items.filter((item) => `${item.label} ${item.hint}`.toLowerCase().includes(query));
+  if (paletteIndex >= matches.length) paletteIndex = Math.max(0, matches.length - 1);
+  $("palette-list").innerHTML = matches.length
+    ? matches
+        .map(
+          (item, index) =>
+            `<button type="button" class="${index === paletteIndex ? "active" : ""}" data-palette-kind="${item.kind}" data-palette-view="${esc(item.view || "")}" data-palette-action="${esc(item.action || "")}"><span>${esc(item.label)}</span><span>${esc(item.hint)}</span></button>`,
+        )
+        .join("")
+    : `<p class="muted" style="padding: 12px">No matches.</p>`;
+}
+
+function openPalette() {
+  paletteIndex = 0;
+  $("palette-modal").hidden = false;
+  $("palette-input").value = "";
+  renderPalette("");
+  $("palette-input").focus();
+}
+
+function closePalette() {
+  $("palette-modal").hidden = true;
+}
+
+function paletteChoose(button) {
+  if (!button) return;
+  if (button.dataset.paletteView) showView(button.dataset.paletteView);
+  else if (button.dataset.paletteAction === "new-chat") newChat();
+  else if (button.dataset.paletteAction === "refresh") refresh();
+  closePalette();
+}
+
 async function refresh() {
   try {
     const response = await api("/api/overview");
@@ -869,12 +1193,16 @@ async function refresh() {
     renderThreads(data.threads);
     renderBots(data.bots);
     renderConnectors(data.bots);
+    renderVariables(data.variables);
+    renderSubscriptions(data.subscriptions);
+    renderSecrets(data.secrets);
     renderUsage(data.agent, data.audit);
     renderSettings(data.settings, data.agent, data.gateway);
     const online = !unavailable(data.gateway?.models) && !unavailable(data.agent?.info);
-    setStatus(online ? "online" : "offline", online ? "gateway + agent online" : "degraded");
+    setStatus(online ? "online" : "offline", online ? "online" : "degraded");
     $("updated").textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
     $("footer-status").textContent = online ? "all systems answer" : "one service is not answering";
+    if (currentView === "providers") loadProviders();
   } catch (error) {
     setStatus("offline", error.message || "unreachable");
   }
@@ -889,7 +1217,7 @@ async function logout() {
 }
 
 function bind() {
-  for (const tab of document.querySelectorAll("#tabs button")) {
+  for (const tab of document.querySelectorAll("#nav button")) {
     tab.addEventListener("click", () => showView(tab.dataset.view));
   }
   $("chat-form").addEventListener("submit", runChat);
@@ -897,9 +1225,30 @@ function bind() {
   $("thread-form").addEventListener("submit", newThread);
   $("bot-form").addEventListener("submit", addBot);
   $("secret-form").addEventListener("submit", saveSecret);
+  $("variable-form").addEventListener("submit", addVariable);
+  $("subscription-form").addEventListener("submit", saveSubscription);
+  $("subscription-cancel").addEventListener("click", resetSubscriptionForm);
   $("config-form").addEventListener("submit", setConfig);
   $("model-save").addEventListener("click", setModel);
   $("approvals-save").addEventListener("click", setApprovals);
+  $("refresh").addEventListener("click", refresh);
+  $("palette").addEventListener("click", openPalette);
+  $("copy-provider-command").addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText($("provider-setup-command").textContent);
+      toast("Provider command copied", "good");
+    } catch {
+      toast("Could not copy; select the command instead", "bad");
+    }
+  });
+  $("logout").addEventListener("click", logout);
+  $("palette-input").addEventListener("input", (event) => {
+    paletteIndex = 0;
+    renderPalette(event.target.value);
+  });
+  $("palette-modal").addEventListener("click", (event) => {
+    if (event.target.id === "palette-modal") closePalette();
+  });
   $("bots-reload").addEventListener("click", async () => {
     try {
       const response = await api("/api/bots/reload", { method: "POST" });
@@ -910,23 +1259,50 @@ function bind() {
       $("bot-output").textContent = String(error.message || error);
     }
   });
-  $("logout").addEventListener("click", logout);
+
+  document.addEventListener("keydown", (event) => {
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+      event.preventDefault();
+      if ($("palette-modal").hidden) openPalette();
+      else closePalette();
+      return;
+    }
+    if ($("palette-modal").hidden) return;
+    if (event.key === "Escape") {
+      closePalette();
+      return;
+    }
+    const buttons = [...$("palette-list").querySelectorAll("button")];
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      if (buttons.length) {
+        paletteIndex = (paletteIndex + (event.key === "ArrowDown" ? 1 : buttons.length - 1)) % buttons.length;
+        renderPalette($("palette-input").value);
+      }
+    }
+    if (event.key === "Enter") {
+      event.preventDefault();
+      paletteChoose($("palette-list .active") || buttons[0]);
+    }
+  });
 
   document.addEventListener("click", (event) => {
     const button = event.target.closest("button");
     if (!button) return;
     if (button.dataset.answer) answerApproval(button.dataset.id, button.dataset.answer);
-    else if (button.dataset.session) loadHistory(button.dataset.session);
-    else if (button.dataset.thread) threadAction(button.dataset.thread, button.dataset.id);
+    else if (button.dataset.session) {
+      loadHistory(button.dataset.session);
+      showView("chat");
+    } else if (button.dataset.thread) threadAction(button.dataset.thread, button.dataset.id);
     else if (button.dataset.botAction) botAction(button.dataset.botAction, button.dataset.name);
     else if (button.dataset.connector) toggleConnector(button.dataset.connector, button.dataset.bot, button.dataset.on === "1");
     else if (button.dataset.toolGroup) toggleToolGroup(button.dataset.toolGroup, button.dataset.on);
-  });
-  document.addEventListener("click", (event) => {
-    const row = event.target.closest("tr[data-session]");
-    if (!row) return;
-    loadHistory(row.dataset.session);
-    showView("chat");
+    else if (button.dataset.variable) removeVariable(button.dataset.variable);
+    else if (button.dataset.subscriptionEdit) editSubscription(button.dataset.subscriptionEdit);
+    else if (button.dataset.subscriptionDelete) removeSubscription(button.dataset.subscriptionDelete);
+    else if (button.dataset.secretDelete) removeSecret(button.dataset.secretDelete);
+    else if (button.dataset.paletteView || button.dataset.paletteAction) paletteChoose(button);
+    else if (button.dataset.viewJump) showView(button.dataset.viewJump);
   });
 }
 

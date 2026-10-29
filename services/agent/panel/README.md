@@ -3,25 +3,40 @@
 One authenticated surface for an Invincible gateway and an Autobot agent. It is a small Node
 process with no runtime dependencies and no build step.
 
-- **Overview:** gateway models and node identity, the agent's tasks and conversations, today's
-  tokens and cost, and the approvals waiting.
-- **Chat:** a conversation transcript, a live turn, a new conversation, and **Keep going** for a
-  delegated run. The versioned stream (`spec/agent.md`, Turn events) gives text and reasoning
-  deltas, tool starts and outputs, diffs, approval cards, receipts and the final answer; a
-  delegated run also reports its nudges and any declined approval. The session id comes back in
-  `X-Session-Id`.
+The shell is a persistent sidebar and a page header, not a wall of cards: **Operate** (Overview,
+Chat, Workspaces), **Configure** (Agents, Providers, Secrets, Variables, Subscriptions,
+Integrations), **Observe** (Usage) and **System** (Settings). `⌘K` opens a command palette for
+navigation and actions; the sidebar keeps live gateway/agent status and the last refresh time.
+
+- **Overview:** gateway and agent health, tasks, today's tokens and cost, the monthly subscription
+  total and next renewal, approvals, recent conversations.
+- **Chat:** a conversation rail, the transcript, and a live turn. **Keep going** runs a delegated
+  turn. The versioned stream (`spec/agent.md`, Turn events) gives text and reasoning deltas, tool
+  starts and outputs, diffs, approval cards, receipts and the final answer; a delegated run also
+  reports its nudges and any declined approval. The session id comes back in `X-Session-Id`.
 - **Workspaces:** start a thread (a git worktree and branch from the bot's project), put it in
   Chat with **Use**, read its **Diff**, open a **PR**, or remove it. A removed thread leaves a
   tombstone so its old session cannot silently use the main checkout.
-- **Bots:** list, add, enable, disable and reload bots.
-- **Integrations:** the channel matrix for every bot, write-only token files (`mode 0600`) in the
-  bot's home, and the configured MCP servers.
+- **Agents:** list, add, enable, disable and reload bots.
+- **Providers:** the models the gateway serves and this agent's model, plus every external coding
+  CLI detected on the machine (`codex`, `claude`, `opencode`, `cursor-agent`, `hermes`, `pi`) with
+  version, path, auth kind and login hint. Provider keys stay in the gateway; the page shows the
+  node-side command for adding one and never sends a key through the browser.
+- **Secrets:** the secret files in the agent's home with kind, size and update time; add or rotate
+  one (write-only, mode 0600) or remove one. Values are never returned.
+- **Variables:** non-secret context added to every turn (`project.name`, `deploy.host`, …), with
+  key, value, description and update time. They are data in the system prompt, not instructions.
+- **Subscriptions:** a ledger of plans, providers, status, monthly cost and currency, renewal date
+  and seats, with totals per currency and the next 30 days' renewals.
+- **Integrations:** the channel matrix for every agent, the configured MCP servers, and incoming
+  webhook guidance. Tokens are managed on **Secrets**.
 - **Usage:** today's turns, calls, tokens and cost; models, tools and failures; the gateway audit.
-- **Settings:** the models the gateway serves (keys stay in the gateway), this bot's model,
-  approvals, tool groups, the workdir/sandbox and any advanced dotted configuration key.
+- **Settings:** this agent's model, approvals, tool groups, the workdir/sandbox, the configured
+  verification check and any advanced dotted configuration key.
 
-The panel never receives a provider key. It holds one Invincible API token, and only the server
-side uses it. The browser sees the panel's own session cookie and a CSRF token.
+The panel holds one Invincible API token, and only the server side uses it. The browser sees the
+panel's own session cookie and a CSRF token. Assets carry a content hash, so a deploy is visible
+immediately through the CDN.
 
 ## Run it
 

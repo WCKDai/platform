@@ -9,7 +9,7 @@ import path from "node:path";
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(DIR, "public");
-const VERSION = "0.1.1";
+const VERSION = "0.1.2";
 const PORT = Number(process.env.PORT || 7800);
 const BIND = process.env.PANEL_BIND || "0.0.0.0";
 const GATEWAY = (process.env.GATEWAY_HTTP_URL || process.env.GATEWAY_URL || "http://127.0.0.1:7777")
@@ -281,7 +281,7 @@ const server = http.createServer(async (request, response) => {
     }
 
     if (url.pathname === "/api/overview") {
-      const [models, node, info, stats, conversations, approvals, usage, insights, audit, threads, bots, settings] =
+      const [models, node, info, stats, conversations, approvals, usage, insights, audit, threads, bots, settings, variables, subscriptions, secrets] =
         await Promise.all([
           safely(GATEWAY, "/v1/models"),
           safely(GATEWAY, "/v1/node"),
@@ -295,6 +295,9 @@ const server = http.createServer(async (request, response) => {
           safely(AGENT, "/v1/agent/threads"),
           safely(AGENT, "/v1/agent/bots"),
           safely(AGENT, "/v1/agent/settings"),
+          safely(AGENT, "/v1/agent/variables"),
+          safely(AGENT, "/v1/agent/subscriptions"),
+          safely(AGENT, "/v1/agent/secrets"),
         ]);
       return json(response, 200, {
         gateway: { models, node },
@@ -303,6 +306,9 @@ const server = http.createServer(async (request, response) => {
         threads,
         bots,
         settings,
+        variables,
+        subscriptions,
+        secrets,
       });
     }
 
@@ -415,6 +421,69 @@ const server = http.createServer(async (request, response) => {
       const name = decodeURIComponent(botPath[1]);
       if (!validId(name)) return json(response, 400, { error: "not a bot name" });
       const result = await upstream(AGENT, `/v1/agent/bots/${encodeURIComponent(name)}/${botPath[2]}`, { method: "POST" });
+      return json(response, result.status, result.value);
+    }
+
+    if (url.pathname === "/api/variables" && request.method === "GET") {
+      const result = await safely(AGENT, "/v1/agent/variables");
+      return json(response, result.status || 502, result.value);
+    }
+    if (url.pathname === "/api/variables" && request.method === "POST") {
+      const payload = JSON.parse(await body(request));
+      const result = await upstream(AGENT, "/v1/agent/variables", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          key: String(payload.key || ""),
+          value: String(payload.value || ""),
+          description: String(payload.description || ""),
+        }),
+      });
+      return json(response, result.status, result.value);
+    }
+    const variablePath = url.pathname.match(/^\/api\/variables\/([^/]+)$/);
+    if (variablePath && request.method === "DELETE") {
+      const key = decodeURIComponent(variablePath[1]);
+      const result = await upstream(AGENT, `/v1/agent/variables/${encodeURIComponent(key)}`, { method: "DELETE" });
+      return json(response, result.status, result.value);
+    }
+
+    if (url.pathname === "/api/subscriptions" && request.method === "GET") {
+      const result = await safely(AGENT, "/v1/agent/subscriptions");
+      return json(response, result.status || 502, result.value);
+    }
+    if (url.pathname === "/api/subscriptions" && request.method === "POST") {
+      const payload = JSON.parse(await body(request));
+      const result = await upstream(AGENT, "/v1/agent/subscriptions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      return json(response, result.status, result.value);
+    }
+    const subscriptionPath = url.pathname.match(/^\/api\/subscriptions\/([^/]+)$/);
+    if (subscriptionPath && request.method === "DELETE") {
+      const id = decodeURIComponent(subscriptionPath[1]);
+      const result = await upstream(AGENT, `/v1/agent/subscriptions/${encodeURIComponent(id)}`, { method: "DELETE" });
+      return json(response, result.status, result.value);
+    }
+
+    if (url.pathname === "/api/providers" && request.method === "GET") {
+      const [models, providers] = await Promise.all([
+        safely(GATEWAY, "/v1/models"),
+        safely(AGENT, "/v1/agent/providers"),
+      ]);
+      return json(response, 200, { models, providers });
+    }
+
+    if (url.pathname === "/api/secrets" && request.method === "GET") {
+      const result = await safely(AGENT, "/v1/agent/secrets");
+      return json(response, result.status || 502, result.value);
+    }
+    const secretPath = url.pathname.match(/^\/api\/secrets\/([^/]+)$/);
+    if (secretPath && request.method === "DELETE") {
+      const name = decodeURIComponent(secretPath[1]);
+      const result = await upstream(AGENT, `/v1/agent/secrets/${encodeURIComponent(name)}`, { method: "DELETE" });
       return json(response, result.status, result.value);
     }
 

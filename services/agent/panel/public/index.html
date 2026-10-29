@@ -4,293 +4,435 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
-  <title>Invincible control</title>
+  <title>Invincible Control</title>
   <link rel="stylesheet" href="/app.css?v={{ASSET_VERSION}}">
 </head>
 <body>
-  <header class="top">
-    <a class="brand" href="/" aria-label="Invincible control">
-      <span class="mark">I</span>
-      <span>invincible<span class="slash">/</span>control</span>
-    </a>
-    <div class="top-right">
-      <span id="status" class="status">connecting</span>
-      <button id="logout" class="ghost" type="button">Sign out</button>
-    </div>
-  </header>
+  <div class="shell">
+    <aside class="sidebar">
+      <a class="brand" href="/" aria-label="Invincible Control">
+        <span class="mark" aria-hidden="true"></span>
+        <span class="brand-text"><strong>Invincible</strong><span>Control</span></span>
+      </a>
 
-  <main>
-    <section class="hero">
-      <div>
-        <p class="kicker">WCKD · self-hosted intelligence</p>
-        <h1>One node.<br><span>Every agent.</span></h1>
-        <p class="lede">The gateway routes and receipts every model call. Autobot does the work. This is the room where you watch, approve, steer, and give every thread a checkout of its own.</p>
+      <nav id="nav" class="nav" aria-label="Control panel sections">
+        <div class="nav-group">
+          <p class="nav-label">Operate</p>
+          <button type="button" data-view="overview">Overview</button>
+          <button type="button" data-view="chat">Chat</button>
+          <button type="button" data-view="workspaces">Workspaces</button>
+        </div>
+        <div class="nav-group">
+          <p class="nav-label">Configure</p>
+          <button type="button" data-view="bots">Agents</button>
+          <button type="button" data-view="providers">Providers</button>
+          <button type="button" data-view="secrets">Secrets</button>
+          <button type="button" data-view="variables">Variables</button>
+          <button type="button" data-view="subscriptions">Subscriptions</button>
+          <button type="button" data-view="integrations">Integrations</button>
+        </div>
+        <div class="nav-group">
+          <p class="nav-label">Observe</p>
+          <button type="button" data-view="usage">Usage</button>
+        </div>
+        <div class="nav-group">
+          <p class="nav-label">System</p>
+          <button type="button" data-view="settings">Settings</button>
+        </div>
+      </nav>
+
+      <div class="sidebar-foot">
+        <div class="node-state">
+          <span id="status" class="status">connecting</span>
+          <span id="updated" class="updated">—</span>
+        </div>
+        <span id="footer-status" class="footer-status">reading the node</span>
+        <button id="logout" class="ghost small" type="button">Sign out</button>
       </div>
-      <div class="hero-meta">
-        <div><span>panel</span><strong>{{VERSION}}</strong></div>
-        <div><span>refresh</span><strong id="updated">—</strong></div>
-      </div>
-    </section>
+    </aside>
 
-    <nav class="tabs" id="tabs" aria-label="Sections">
-      <button data-view="overview" class="active" type="button">Overview</button>
-      <button data-view="chat" type="button">Chat</button>
-      <button data-view="workspaces" type="button">Workspaces</button>
-      <button data-view="bots" type="button">Bots</button>
-      <button data-view="integrations" type="button">Integrations</button>
-      <button data-view="usage" type="button">Usage</button>
-      <button data-view="settings" type="button">Settings</button>
-    </nav>
+    <div class="workspace">
+      <header class="topbar">
+        <div class="page-id">
+          <h1 id="page-title">Overview</h1>
+          <p id="page-subtitle">The node, the agent, and what needs you.</p>
+        </div>
+        <div class="top-actions">
+          <button id="refresh" class="ghost" type="button">Refresh</button>
+          <button id="palette" class="command" type="button" aria-label="Open command palette">
+            <span>Jump to</span><kbd>⌘ K</kbd>
+          </button>
+        </div>
+      </header>
 
-    <section class="view" data-view="overview">
-      <div class="grid">
-        <article class="card">
-          <div class="card-head"><h2>Gateway</h2><span id="gateway-state" class="badge">—</span></div>
-          <div id="gateway-node" class="muted">reading the node…</div>
-          <div id="models" class="models"></div>
-        </article>
+      <main class="content">
+        <section class="view" data-view="overview">
+          <div class="grid overview-grid">
+            <article class="card">
+              <div class="card-head"><h2>Gateway</h2><span id="gateway-state" class="badge">—</span></div>
+              <div id="gateway-node" class="muted">Reading the node…</div>
+              <div id="models" class="models"></div>
+            </article>
 
-        <article class="card">
-          <div class="card-head"><h2>Agent</h2><span id="agent-state" class="badge">—</span></div>
-          <div class="stats">
-            <div><span>tasks</span><strong id="stat-tasks">—</strong></div>
-            <div><span>sessions</span><strong id="stat-sessions">—</strong></div>
-            <div><span>waiting</span><strong id="stat-waiting">—</strong></div>
+            <article class="card">
+              <div class="card-head"><h2>Agent</h2><span id="agent-state" class="badge">—</span></div>
+              <div class="stats">
+                <div><span>tasks</span><strong id="stat-tasks">—</strong></div>
+                <div><span>sessions</span><strong id="stat-sessions">—</strong></div>
+                <div><span>waiting</span><strong id="stat-waiting">—</strong></div>
+              </div>
+              <div id="agent-info" class="muted">Reading the agent…</div>
+            </article>
+
+            <article class="card">
+              <div class="card-head"><h2>Today</h2><span class="badge quiet">tokens &amp; cost</span></div>
+              <div class="stats">
+                <div><span>turns</span><strong id="today-turns">—</strong></div>
+                <div><span>calls</span><strong id="today-calls">—</strong></div>
+                <div><span>cost</span><strong id="today-cost">—</strong></div>
+              </div>
+              <div id="today-tokens" class="muted">—</div>
+            </article>
+
+            <article class="card">
+              <div class="card-head"><h2>Subscriptions</h2><span class="badge quiet">monthly</span></div>
+              <div id="subscription-overview" class="list"><p class="muted">No plans recorded.</p></div>
+            </article>
+
+            <article class="card wide">
+              <div class="card-head"><h2>Approvals</h2><span class="badge quiet">needs a decision</span></div>
+              <div id="approvals" class="list"><p class="muted">Nothing waiting.</p></div>
+            </article>
+
+            <article class="card wide">
+              <div class="card-head"><h2>Recent conversations</h2><button class="ghost mini" type="button" data-view-jump="chat">Open chat</button></div>
+              <div id="recent" class="list"><p class="muted">No conversations yet.</p></div>
+            </article>
           </div>
-          <div id="agent-info" class="muted">reading the agent…</div>
-        </article>
+        </section>
 
-        <article class="card">
-          <div class="card-head"><h2>Today</h2><span class="badge quiet">tokens &amp; cost</span></div>
-          <div class="stats">
-            <div><span>turns</span><strong id="today-turns">—</strong></div>
-            <div><span>calls</span><strong id="today-calls">—</strong></div>
-            <div><span>cost</span><strong id="today-cost">—</strong></div>
+        <section class="view" data-view="chat" hidden>
+          <div class="chat-layout">
+            <aside class="card conversation-rail">
+              <div class="card-head"><h2>Conversations</h2><span class="badge quiet">newest first</span></div>
+              <div id="sessions" class="conversation-list"><p class="muted">Reading conversations…</p></div>
+            </aside>
+
+            <article class="card chat-card">
+              <div class="card-head">
+                <h2 id="chat-title">New conversation</h2>
+                <span class="badge quiet" id="chat-session-label">not saved yet</span>
+                <button id="chat-new" class="ghost mini" type="button">New chat</button>
+              </div>
+              <div id="chat" class="chat"><p class="muted">Pick a conversation, or ask Autobot to do something.</p></div>
+              <form id="chat-form" class="task composer">
+                <label for="chat-text">Task</label>
+                <textarea id="chat-text" rows="3" maxlength="8000" placeholder="Fix the failing test in checkout.py and run it once." required></textarea>
+                <div class="row">
+                  <input id="chat-session" type="text" maxlength="80" placeholder="session (optional)" autocomplete="off" spellcheck="false">
+                  <label class="check" title="Keep going without waiting for you. Approvals are declined with a safer path, never accepted."><input id="chat-delegate" type="checkbox"> Keep going</label>
+                  <button class="primary" type="submit" id="chat-send">Send</button>
+                </div>
+              </form>
+            </article>
           </div>
-          <div id="today-tokens" class="muted">—</div>
-        </article>
+        </section>
 
-        <article class="card wide">
-          <div class="card-head"><h2>Approvals</h2><span class="badge quiet">one key to answer</span></div>
-          <div id="approvals" class="list"><p class="muted">Nothing waiting.</p></div>
-        </article>
-      </div>
-    </section>
-
-    <section class="view" data-view="chat" hidden>
-      <div class="grid">
-        <article class="card wide chat-card">
-          <div class="card-head">
-            <h2>Chat</h2>
-            <span id="chat-title" class="badge quiet">new conversation</span>
-            <button id="chat-new" class="ghost mini" type="button">New chat</button>
+        <section class="view" data-view="workspaces" hidden>
+          <div class="grid">
+            <article class="card wide">
+              <div class="card-head"><h2>Workspaces</h2><span class="badge quiet">one worktree per thread</span></div>
+              <p class="small">A thread is a conversation with its own git worktree and branch. Run it from Chat, review the diff, and open a pull request without touching the main checkout.</p>
+              <form id="thread-form" class="task">
+                <div class="row">
+                  <input id="thread-name" type="text" maxlength="80" placeholder="name (optional)" autocomplete="off">
+                  <input id="thread-base" type="text" maxlength="120" placeholder="base branch (optional)" autocomplete="off" spellcheck="false">
+                  <button class="primary" type="submit">Start thread</button>
+                </div>
+              </form>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Thread</th><th>Branch</th><th>State</th><th>PR</th><th></th></tr></thead>
+                  <tbody id="threads"><tr><td colspan="5" class="muted">Reading threads…</td></tr></tbody>
+                </table>
+              </div>
+              <pre id="thread-output" class="output tall">Pick a thread to see its diff or open a pull request.</pre>
+            </article>
           </div>
-          <div id="chat" class="chat"><p class="muted">Pick a conversation, or start a new one.</p></div>
-          <form id="chat-form" class="task">
-            <label for="chat-text">What should Autobot do?</label>
-            <textarea id="chat-text" rows="3" maxlength="8000" placeholder="Fix the failing test in checkout.py and run it once." required></textarea>
-            <div class="row">
-              <input id="chat-session" type="text" maxlength="80" placeholder="session (optional)" autocomplete="off" spellcheck="false">
-              <label class="check" title="Keep going without waiting for you. Approvals are declined with a safer path, never accepted."><input id="chat-delegate" type="checkbox"> Keep going</label>
-              <button class="primary" type="submit" id="chat-send">Send</button>
-            </div>
-          </form>
-        </article>
+        </section>
 
-        <article class="card wide">
-          <div class="card-head"><h2>Conversations</h2><span class="badge quiet">newest first</span></div>
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th>Conversation</th><th>Bot</th><th>Last turn</th></tr></thead>
-              <tbody id="sessions"><tr><td colspan="3" class="muted">Reading conversations…</td></tr></tbody>
-            </table>
+        <section class="view" data-view="bots" hidden>
+          <div class="grid">
+            <article class="card wide">
+              <div class="card-head"><h2>Agents</h2><button id="bots-reload" class="ghost mini" type="button">Reload configuration</button></div>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Agent</th><th>Model</th><th>Approvals</th><th>Status</th><th>Channels</th><th>Sessions</th><th></th></tr></thead>
+                  <tbody id="bots"><tr><td colspan="7" class="muted">Reading agents…</td></tr></tbody>
+                </table>
+              </div>
+            </article>
+
+            <article class="card wide">
+              <div class="card-head"><h2>Add an agent</h2><span class="badge quiet">its own persona and home</span></div>
+              <form id="bot-form" class="task form-grid">
+                <div class="field"><label for="bot-name">Name</label><input id="bot-name" type="text" maxlength="32" placeholder="lowercase" required autocomplete="off" spellcheck="false"></div>
+                <div class="field"><label for="bot-description">Purpose</label><input id="bot-description" type="text" maxlength="160" placeholder="what it is for" autocomplete="off"></div>
+                <div class="field"><label for="bot-model">Model</label><input id="bot-model" type="text" maxlength="80" placeholder="auto" autocomplete="off" spellcheck="false"></div>
+                <div class="field"><label for="bot-approvals">Approvals</label><select id="bot-approvals">
+                  <option value="">inherit</option><option value="ask">ask</option><option value="edits">edits</option><option value="auto">auto</option><option value="allowlist">allowlist</option><option value="trust">trust</option>
+                </select></div>
+                <div class="field wide"><label for="bot-tools">Tool groups</label><input id="bot-tools" type="text" maxlength="200" placeholder="files-read, files-write, terminal, web" autocomplete="off" spellcheck="false"></div>
+                <div class="field"><label for="bot-workdir">Working directory</label><input id="bot-workdir" type="text" maxlength="200" placeholder="the bot's project" autocomplete="off" spellcheck="false"></div>
+                <div class="field wide"><label for="bot-soul">Persona</label><textarea id="bot-soul" rows="2" maxlength="4000" placeholder="Who it is, in a sentence or two."></textarea></div>
+                <div class="row"><button class="primary" type="submit">Add agent</button></div>
+              </form>
+              <pre id="bot-output" class="output"></pre>
+            </article>
           </div>
-        </article>
-      </div>
-    </section>
+        </section>
 
-    <section class="view" data-view="workspaces" hidden>
-      <div class="grid">
-        <article class="card wide">
-          <div class="card-head"><h2>Workspaces</h2><span class="badge quiet">one worktree per thread</span></div>
-          <p class="small">A thread is a conversation with its own git worktree and branch, made from the bot's project. Run a task in it from Chat, then review the diff and open a pull request.</p>
-          <form id="thread-form" class="task">
-            <label for="thread-name">Start a thread in the project</label>
-            <div class="row">
-              <input id="thread-name" type="text" maxlength="80" placeholder="name (optional)" autocomplete="off">
-              <input id="thread-base" type="text" maxlength="120" placeholder="base branch (optional)" autocomplete="off" spellcheck="false">
-              <button class="primary" type="submit">Start</button>
-            </div>
-          </form>
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th>Thread</th><th>Branch</th><th>State</th><th>PR</th><th></th></tr></thead>
-              <tbody id="threads"><tr><td colspan="5" class="muted">Reading threads…</td></tr></tbody>
-            </table>
+        <section class="view" data-view="providers" hidden>
+          <div class="grid">
+            <article class="card wide">
+              <div class="card-head"><h2>Model providers</h2><span class="badge quiet">gateway</span></div>
+              <p class="small" id="provider-note">The gateway serves these models. Provider keys stay in the gateway; the panel never sees them.</p>
+              <div id="providers" class="list"><p class="muted">Reading models…</p></div>
+              <div class="row provider-pick">
+                <select id="model-select"></select>
+                <button id="model-save" class="primary" type="button">Use for this agent</button>
+              </div>
+            </article>
+
+            <article class="card wide">
+              <div class="card-head"><h2>Agent providers</h2><span class="badge quiet">installed on this machine</span></div>
+              <p class="small">Autobot can hand coding work to these installed CLIs. They use their own accounts; the gateway never sees those credentials.</p>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Provider</th><th>Version</th><th>Auth</th><th>Capabilities</th><th>Status</th></tr></thead>
+                  <tbody id="agent-providers"><tr><td colspan="5" class="muted">Detecting installed providers…</td></tr></tbody>
+                </table>
+              </div>
+            </article>
+
+            <article class="card wide">
+              <div class="card-head"><h2>Add a gateway provider</h2><span class="badge quiet">node-side key</span></div>
+              <p class="small">The gateway owns provider keys. On the node, run the command for the provider you want; it prompts for the key. The model appears here after the gateway restarts.</p>
+              <pre id="provider-setup-command" class="output">invincible cloud add anthropic --id claude
+# or: invincible cloud add openai --id gpt
+# or: invincible cloud add openrouter --id openrouter
+# or: invincible cloud add custom --id my-provider --base-url https://host/v1 --model my-model</pre>
+              <div class="row">
+                <button id="copy-provider-command" class="ghost mini" type="button">Copy command</button>
+                <span class="small muted">A provider key is never sent to this browser again.</span>
+              </div>
+            </article>
           </div>
-          <pre id="thread-output" class="output tall">Pick a thread to see its diff or open a pull request.</pre>
-        </article>
-      </div>
-    </section>
+        </section>
 
-    <section class="view" data-view="bots" hidden>
-      <div class="grid">
-        <article class="card wide">
-          <div class="card-head"><h2>Bots</h2><button id="bots-reload" class="ghost mini" type="button">Reload configuration</button></div>
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th>Bot</th><th>Model</th><th>Approvals</th><th>Status</th><th>Channels</th><th>Sessions</th><th></th></tr></thead>
-              <tbody id="bots"><tr><td colspan="7" class="muted">Reading bots…</td></tr></tbody>
-            </table>
+        <section class="view" data-view="secrets" hidden>
+          <div class="grid">
+            <article class="card split-main">
+              <div class="card-head"><h2>Stored secrets</h2><span class="badge quiet">values are never shown</span></div>
+              <p class="small">Connector tokens and named secret files in the agent's home. These are read by channels and hooks; they are never returned by the API.</p>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Name</th><th>Kind</th><th>Size</th><th>Updated</th><th></th></tr></thead>
+                  <tbody id="secrets"><tr><td colspan="5" class="muted">Reading secret files…</td></tr></tbody>
+                </table>
+              </div>
+            </article>
+
+            <article class="card">
+              <div class="card-head"><h2>Add or rotate</h2><span class="badge quiet">write-only</span></div>
+              <form id="secret-form" class="task">
+                <div class="field"><label for="secret-bot">Agent</label><select id="secret-bot"><option value="">default</option></select></div>
+                <div class="field"><label for="secret-file">File</label><input id="secret-file" type="text" maxlength="80" placeholder="telegram.token" required autocomplete="off" spellcheck="false"></div>
+                <div class="field"><label for="secret-value">Value</label><input id="secret-value" type="password" maxlength="4000" required autocomplete="new-password"></div>
+                <p class="small">A plain file name in the agent's home. It is written with mode 0600 and never returned.</p>
+                <div class="row"><button class="primary" type="submit">Write secret</button></div>
+              </form>
+              <pre id="secret-output" class="output"></pre>
+            </article>
           </div>
-        </article>
+        </section>
 
-        <article class="card wide">
-          <div class="card-head"><h2>Add a bot</h2><span class="badge quiet">its own persona and home</span></div>
-          <form id="bot-form" class="task">
-            <div class="row">
-              <input id="bot-name" type="text" maxlength="32" placeholder="name (lowercase)" required autocomplete="off" spellcheck="false">
-              <input id="bot-description" type="text" maxlength="160" placeholder="what it is for" autocomplete="off">
-              <input id="bot-model" type="text" maxlength="80" placeholder="model (optional)" autocomplete="off" spellcheck="false">
-            </div>
-            <div class="row">
-              <select id="bot-approvals">
-                <option value="">approvals: inherit</option>
-                <option value="ask">ask</option>
-                <option value="edits">edits</option>
-                <option value="auto">auto</option>
-                <option value="allowlist">allowlist</option>
-                <option value="trust">trust</option>
+        <section class="view" data-view="variables" hidden>
+          <div class="grid">
+            <article class="card split-main">
+              <div class="card-head"><h2>Variables</h2><span class="badge quiet">visible to the model</span></div>
+              <p class="small">Non-secret context added to every turn: project names, hosts, conventions, paths. Do not put credentials here.</p>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Key</th><th>Value</th><th>Description</th><th>Updated</th><th></th></tr></thead>
+                  <tbody id="variables"><tr><td colspan="5" class="muted">No variables.</td></tr></tbody>
+                </table>
+              </div>
+            </article>
+
+            <article class="card">
+              <div class="card-head"><h2>Add a variable</h2><span class="badge quiet">one line</span></div>
+              <form id="variable-form" class="task">
+                <div class="field"><label for="variable-key">Key</label><input id="variable-key" type="text" maxlength="80" placeholder="project.name" required autocomplete="off" spellcheck="false"></div>
+                <div class="field"><label for="variable-value">Value</label><input id="variable-value" type="text" maxlength="4000" required autocomplete="off"></div>
+                <div class="field"><label for="variable-description">Description</label><input id="variable-description" type="text" maxlength="200" placeholder="optional" autocomplete="off"></div>
+                <div class="row"><button class="primary" type="submit">Save variable</button></div>
+              </form>
+              <pre id="variable-output" class="output"></pre>
+            </article>
+          </div>
+        </section>
+
+        <section class="view" data-view="subscriptions" hidden>
+          <div class="grid">
+            <article class="card wide">
+              <div class="card-head"><h2>Monthly spend</h2><span class="badge quiet">plans and renewals</span></div>
+              <div id="subscription-summary" class="stats wide-stats"></div>
+            </article>
+
+            <article class="card split-main">
+              <div class="card-head"><h2>Plans</h2><span class="badge quiet">cost and renewals</span></div>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Plan</th><th>Provider</th><th>Status</th><th>Monthly</th><th>Renews</th><th>Seats</th><th></th></tr></thead>
+                  <tbody id="subscriptions"><tr><td colspan="7" class="muted">No subscriptions.</td></tr></tbody>
+                </table>
+              </div>
+              <div id="subscription-upcoming" class="list"></div>
+            </article>
+
+            <article class="card">
+              <div class="card-head"><h2 id="subscription-form-title">Add a subscription</h2><button id="subscription-cancel" class="ghost mini" type="button" hidden>Cancel edit</button></div>
+              <form id="subscription-form" class="task">
+                <input id="subscription-id" type="hidden">
+                <div class="field"><label for="subscription-name">Name</label><input id="subscription-name" type="text" maxlength="100" placeholder="Claude Max" required autocomplete="off"></div>
+                <div class="field"><label for="subscription-provider">Provider</label><input id="subscription-provider" type="text" maxlength="80" placeholder="Anthropic" autocomplete="off"></div>
+                <div class="field"><label for="subscription-plan">Plan</label><input id="subscription-plan" type="text" maxlength="80" placeholder="Max 20x" autocomplete="off"></div>
+                <div class="row">
+                  <div class="field"><label for="subscription-status">Status</label><select id="subscription-status"><option value="active">active</option><option value="paused">paused</option><option value="cancelled">cancelled</option></select></div>
+                  <div class="field"><label for="subscription-cost">Monthly cost</label><input id="subscription-cost" type="number" min="0" step="0.01" value="0"></div>
+                  <div class="field"><label for="subscription-currency">Currency</label><input id="subscription-currency" type="text" maxlength="3" value="USD" autocomplete="off" spellcheck="false"></div>
+                </div>
+                <div class="row">
+                  <div class="field"><label for="subscription-renew">Renews on</label><input id="subscription-renew" type="date"></div>
+                  <div class="field"><label for="subscription-seats">Seats</label><input id="subscription-seats" type="number" min="1" step="1" value="1"></div>
+                </div>
+                <div class="field"><label for="subscription-url">URL</label><input id="subscription-url" type="url" maxlength="300" placeholder="https://" autocomplete="off" spellcheck="false"></div>
+                <div class="field"><label for="subscription-notes">Notes</label><textarea id="subscription-notes" rows="2" maxlength="500"></textarea></div>
+                <div class="row"><button class="primary" type="submit">Save subscription</button></div>
+              </form>
+              <pre id="subscription-output" class="output"></pre>
+            </article>
+          </div>
+        </section>
+
+        <section class="view" data-view="integrations" hidden>
+          <div class="grid">
+            <article class="card wide">
+              <div class="card-head"><h2>Connectors</h2><span class="badge quiet">channels per agent</span></div>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Agent</th><th>Telegram</th><th>Discord</th><th>Slack</th><th>Email</th><th>Signal</th><th>Matrix</th><th>WhatsApp</th></tr></thead>
+                  <tbody id="connectors"><tr><td colspan="8" class="muted">Reading connectors…</td></tr></tbody>
+                </table>
+              </div>
+              <p class="small">A channel starts when its token file is in the agent's home and the channel is enabled. Add or rotate tokens in <button class="linkish" data-view-jump="secrets" type="button">Secrets</button>.</p>
+            </article>
+
+            <article class="card">
+              <div class="card-head"><h2>MCP servers</h2><span class="badge quiet">tools from other programs</span></div>
+              <div id="mcp" class="list"><p class="muted">None configured.</p></div>
+              <p class="small">Add one with <code>autobot config set mcp.github.command …</code>, or in Settings.</p>
+            </article>
+
+            <article class="card">
+              <div class="card-head"><h2>Webhooks</h2><span class="badge quiet">incoming tasks</span></div>
+              <p class="small">Hooks are configured in the agent's <code>[hooks]</code> section. The panel writes the task and secret files; the gateway routes the public endpoint.</p>
+              <pre class="output">[hooks]
+listen = "127.0.0.1:7794"
+
+[hooks.github]
+task = "A GitHub event arrived. Tell the owner what happened."
+telegram = true</pre>
+            </article>
+          </div>
+        </section>
+
+        <section class="view" data-view="usage" hidden>
+          <div class="grid">
+            <article class="card wide">
+              <div class="card-head"><h2>Usage</h2><span class="badge quiet">the last day</span></div>
+              <div id="usage" class="stats wide-stats"></div>
+              <div id="usage-note" class="muted"></div>
+            </article>
+
+            <article class="card wide">
+              <div class="card-head"><h2>Models and tools</h2><span class="badge quiet">what ran</span></div>
+              <div id="insights" class="list"></div>
+            </article>
+
+            <article class="card wide">
+              <div class="card-head"><h2>Receipts</h2><span class="badge quiet">gateway audit</span></div>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>API</th><th>Decision</th><th>When</th></tr></thead>
+                  <tbody id="audit"><tr><td colspan="3" class="muted">Reading the audit log…</td></tr></tbody>
+                </table>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="view" data-view="settings" hidden>
+          <div class="grid">
+            <article class="card">
+              <div class="card-head"><h2>Approvals</h2><span class="badge quiet">how much runs alone</span></div>
+              <select id="approvals-select">
+                <option value="ask">ask</option><option value="edits">edits</option><option value="auto">auto</option><option value="allowlist">allowlist</option><option value="trust">trust</option>
               </select>
-              <input id="bot-tools" type="text" maxlength="200" placeholder="tool groups (optional: files-read,files-write,terminal,web)" autocomplete="off" spellcheck="false">
-              <input id="bot-workdir" type="text" maxlength="200" placeholder="workdir (optional)" autocomplete="off" spellcheck="false">
-            </div>
-            <label for="bot-soul">Persona (optional)</label>
-            <textarea id="bot-soul" rows="2" maxlength="4000" placeholder="Who it is, in a sentence or two."></textarea>
-            <div class="row"><button class="primary" type="submit">Add bot</button></div>
-          </form>
-          <pre id="bot-output" class="output"></pre>
-        </article>
-      </div>
-    </section>
+              <div class="row"><button id="approvals-save" class="primary" type="button">Save</button></div>
+              <p class="small">Auto lets commands and project changes run; network and outside reads still ask. Allowlist refuses everything not listed; trust runs everything.</p>
+            </article>
 
-    <section class="view" data-view="integrations" hidden>
-      <div class="grid">
-        <article class="card wide">
-          <div class="card-head"><h2>Connectors</h2><span class="badge quiet">channels per bot</span></div>
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th>Bot</th><th>Telegram</th><th>Discord</th><th>Slack</th><th>Email</th><th>Signal</th><th>Matrix</th><th>WhatsApp</th></tr></thead>
-              <tbody id="connectors"><tr><td colspan="8" class="muted">Reading connectors…</td></tr></tbody>
-            </table>
+            <article class="card">
+              <div class="card-head"><h2>Tools</h2><span class="badge quiet">groups</span></div>
+              <div id="tools" class="list"><p class="muted">Reading tools…</p></div>
+            </article>
+
+            <article class="card wide">
+              <div class="card-head"><h2>Agent</h2><span class="badge quiet">read-only</span></div>
+              <div id="agent-settings" class="list muted">—</div>
+            </article>
+
+            <article class="card wide">
+              <div class="card-head"><h2>Advanced setting</h2><span class="badge quiet">dotted key</span></div>
+              <form id="config-form" class="task">
+                <div class="row">
+                  <select id="config-bot"><option value="">default</option></select>
+                  <input id="config-key" type="text" maxlength="120" placeholder="gateway.model" required autocomplete="off" spellcheck="false">
+                  <input id="config-value" type="text" maxlength="4000" placeholder="value" required autocomplete="off" spellcheck="false">
+                  <label class="check"><input id="config-literal" type="checkbox"> literal string</label>
+                  <button class="primary" type="submit">Set</button>
+                </div>
+              </form>
+              <pre id="config-output" class="output"></pre>
+              <p class="small">Examples: <code>telegram.enabled true</code>, <code>email.address bot@example.org</code>, <code>mcp.github.command npx</code>, <code>agent.check cargo test</code>. A token file is written on Secrets.</p>
+            </article>
           </div>
-          <p class="small">A channel starts when its token file is in the bot's home and the channel is enabled. The token is written with mode 0600; it is never shown again.</p>
-        </article>
+        </section>
+      </main>
+    </div>
+  </div>
 
-        <article class="card">
-          <div class="card-head"><h2>Set a token</h2><span class="badge quiet">write-only</span></div>
-          <form id="secret-form" class="task">
-            <label for="secret-bot">Bot</label>
-            <select id="secret-bot"><option value="">default</option></select>
-            <label for="secret-file">File in the bot home</label>
-            <input id="secret-file" type="text" maxlength="80" placeholder="telegram.token" required autocomplete="off" spellcheck="false">
-            <label for="secret-value">Token or password</label>
-            <input id="secret-value" type="password" maxlength="4000" required autocomplete="new-password">
-            <div class="row"><button class="primary" type="submit">Write token</button></div>
-          </form>
-          <pre id="secret-output" class="output"></pre>
-        </article>
+  <div id="toasts" class="toasts" aria-live="polite"></div>
 
-        <article class="card">
-          <div class="card-head"><h2>MCP servers</h2><span class="badge quiet">tools from other programs</span></div>
-          <div id="mcp" class="list"><p class="muted">None configured.</p></div>
-          <p class="small">Add one with <code>autobot config set mcp.github.command …</code>, or in Settings below.</p>
-        </article>
-      </div>
-    </section>
-
-    <section class="view" data-view="usage" hidden>
-      <div class="grid">
-        <article class="card wide">
-          <div class="card-head"><h2>Usage</h2><span class="badge quiet">the last day</span></div>
-          <div id="usage" class="stats wide-stats"></div>
-          <div id="usage-note" class="muted"></div>
-        </article>
-
-        <article class="card wide">
-          <div class="card-head"><h2>Models and tools</h2><span class="badge quiet">what ran</span></div>
-          <div id="insights" class="list"></div>
-        </article>
-
-        <article class="card wide">
-          <div class="card-head"><h2>Receipts</h2><span class="badge quiet">gateway audit</span></div>
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th>API</th><th>Decision</th><th>When</th></tr></thead>
-              <tbody id="audit"><tr><td colspan="3" class="muted">Reading the audit log…</td></tr></tbody>
-            </table>
-          </div>
-        </article>
-      </div>
-    </section>
-
-    <section class="view" data-view="settings" hidden>
-      <div class="grid">
-        <article class="card wide">
-          <div class="card-head"><h2>Providers</h2><span class="badge quiet">the gateway holds the keys</span></div>
-          <p class="small" id="provider-note">The gateway serves these models. Provider keys stay in the gateway (Coolify's environment or the node's config); the panel never sees them.</p>
-          <div id="providers" class="list"></div>
-          <div class="row">
-            <select id="model-select"></select>
-            <button id="model-save" class="primary" type="button">Set this bot's model</button>
-          </div>
-        </article>
-
-        <article class="card">
-          <div class="card-head"><h2>Approvals</h2><span class="badge quiet">how much runs alone</span></div>
-          <select id="approvals-select">
-            <option value="ask">ask</option>
-            <option value="edits">edits</option>
-            <option value="auto">auto</option>
-            <option value="allowlist">allowlist</option>
-            <option value="trust">trust</option>
-          </select>
-          <div class="row"><button id="approvals-save" class="primary" type="button">Save</button></div>
-          <p class="small">Auto lets commands and project changes run; network and outside reads still ask. Allowlist refuses everything not listed; trust runs everything.</p>
-        </article>
-
-        <article class="card">
-          <div class="card-head"><h2>Tools</h2><span class="badge quiet">groups</span></div>
-          <div id="tools" class="list"><p class="muted">Reading tools…</p></div>
-        </article>
-
-        <article class="card wide">
-          <div class="card-head"><h2>Agent</h2><span class="badge quiet">read-only</span></div>
-          <div id="agent-settings" class="muted">—</div>
-        </article>
-
-        <article class="card wide">
-          <div class="card-head"><h2>Advanced setting</h2><span class="badge quiet">dotted key</span></div>
-          <form id="config-form" class="task">
-            <div class="row">
-              <select id="config-bot"><option value="">default</option></select>
-              <input id="config-key" type="text" maxlength="120" placeholder="gateway.model" required autocomplete="off" spellcheck="false">
-              <input id="config-value" type="text" maxlength="4000" placeholder="value" required autocomplete="off" spellcheck="false">
-              <label class="check"><input id="config-literal" type="checkbox"> literal string</label>
-              <button class="primary" type="submit">Set</button>
-            </div>
-          </form>
-          <pre id="config-output" class="output"></pre>
-          <p class="small">Examples: <code>telegram.enabled true</code>, <code>email.address bot@example.org</code>, <code>mcp.github.command npx</code>. A token file is written with the form on Integrations.</p>
-        </article>
-      </div>
-    </section>
-
-    <footer>
-      <span>Invincible keeps the keys. The panel never sees a model provider key.</span>
-      <span id="footer-status">—</span>
-    </footer>
-  </main>
+  <div id="palette-modal" class="modal" hidden>
+    <div class="palette" role="dialog" aria-modal="true" aria-label="Command palette">
+      <input id="palette-input" type="text" placeholder="Jump to a section or action…" autocomplete="off" spellcheck="false">
+      <div id="palette-list" class="palette-list"></div>
+      <p class="palette-hint">Enter to open · Esc to close</p>
+    </div>
+  </div>
 
   <script type="module" src="/app.js?v={{ASSET_VERSION}}"></script>
 </body>

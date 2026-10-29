@@ -149,8 +149,17 @@ webhook` gets one signed JSON POST with the outcome.
 not guess, ask first or confirm never gets a nudge; `delegate.started.questions` is `"owner"` and
 the first question ends the run for the owner. The alpha run that exposed this (0.0.25 chose a
 filename after "do not guess") was repeated on 0.0.26 and stopped at the question with no file.
-Panel assets now carry a content hash, so a deploy is visible immediately through the CDN. The
-adapter registry and persistent resume across a long usage limit remain.
+Panel assets now carry a content hash, so a deploy is visible immediately through the CDN.
+
+**Shipped in 0.0.27:** the panel is a real control surface: a persistent sidebar, command palette,
+conversation rail, responsive tables and forms, and pages for **Providers**, **Secrets**,
+**Variables** and **Subscriptions**. Variables are non-secret context injected into every turn;
+subscriptions are a plan/renewal ledger with totals per currency; secrets are listed, rotated and
+removed without ever returning a value; providers shows the gateway models and every external
+coding CLI detected on the machine. The agent gained a **verification gate**: `[agent] check`
+runs after a turn changed files, feeds a failure back once, and stops with the failure visible
+instead of claiming success. The adapter registry and persistent resume across a long usage limit
+remain.
 
 **Deployed on 2026-10-29:** the alpha panel at
 [`agent.invincible.sh`](https://agent.invincible.sh) runs the gateway, Autobot and
