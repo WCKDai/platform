@@ -203,6 +203,11 @@ regenerates the seeded config when needed. Unit/API tests cover add, update, rem
 write-only, an environment-key provider keeping its source, and the model appearing in `/v1/models`
 without a restart; the panel flow was exercised against a live gateway.
 
+**Shipped in 0.0.31:** a patch release for the provider admin: a gateway started before any
+`config.toml` exists can now add its first provider, and the early-404 body-limit test is
+deterministic (headers with a declared 33 MiB body, no client-side upload race). No UI change;
+the alpha/local installs move to the same binaries.
+
 **Deployed on 2026-10-29:** the alpha panel at
 [`agent.invincible.sh`](https://agent.invincible.sh) runs the gateway, Autobot and panel together
 in the PolyCore Coolify project, now at **0.0.30** (panel 0.1.5). All three are healthy; login,

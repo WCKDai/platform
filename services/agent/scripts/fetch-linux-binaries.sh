@@ -3,7 +3,7 @@
 # Usage: scripts/fetch-linux-binaries.sh [version] [arch]
 set -eu
 
-VERSION="${1:-v0.0.30}"
+VERSION="${1:-v0.0.31}"
 ARCH="${2:-$(uname -m)}"
 case "$ARCH" in
   x86_64|amd64) ASSET=invincible-linux-x64.tar.gz ;;
