@@ -4,6 +4,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 COPY package.json server.mjs rent.mjs studio.mjs ./
+COPY presets ./presets
 COPY public ./public
 
 USER node

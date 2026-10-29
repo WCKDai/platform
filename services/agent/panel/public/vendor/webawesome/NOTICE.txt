@@ -5,7 +5,7 @@ License: MIT (Fonticons, Inc.) — see LICENSE.md
 Pinned: 2026-10-29
 Subset: the components imported by /vendor/panel-kit.js and the theme CSS they need.
 Icons used by those components are the inlined "system" set (Font Awesome Free, CC BY 4.0).
-No CDN requests. Two local patches, both marked in the files:
+No CDN requests. Three local patches, all marked in the files:
 - chunk.KKI7M5DP.js getIconUrl returns an empty SVG instead of ka-f.fontawesome.com.
 - chunk.SLTXS4GR.js decodes data: icon URLs without fetch, so connect-src stays 'self'.
 - chunk.L7UUCOPZ.js drawer handleOpenChange only requests close when open is false,
