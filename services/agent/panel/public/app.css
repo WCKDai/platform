@@ -436,3 +436,13 @@ tbody tr.active td { background: rgba(201, 255, 99, 0.08); }
   background: rgba(255, 196, 107, 0.06);
 }
 .bubble.approval-card .actions { margin-top: 9px; }
+.row .check {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.row .check input { accent-color: var(--lime); }

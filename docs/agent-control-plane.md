@@ -136,8 +136,15 @@ routes it needs and still never sees a provider key.
 **Shipped in 0.0.24:** the versioned turn stream (`spec/agent.md`, Turn events): `turn.started`,
 text and reasoning deltas, tool starts and outputs, diffs and changes, usage, receipts, approval
 cards, the final answer and kept notes, all with `v: 1`. The panel renders the live text, diffs,
-tool output and approval cards instead of waiting for the answer. The adapter registry and
-delegated mode remain.
+tool output and approval cards instead of waiting for the answer.
+
+**Shipped in 0.0.25:** delegated turns (`"delegated": true` or a scope): bounded nudges after a
+routine question, a stall limit (three times as long while a tool runs), a five-minute usage-limit
+wait with `retry_at` for longer ones, and an approver that never accepts: every safety check is
+declined with a redirect, reported as `delegate.declined`, and not worked around. The panel's
+**Keep going** renders the run's nudges, declines and summary, and a configured `[delegate]
+webhook` gets one signed JSON POST with the outcome. The adapter registry and persistent resume
+across a long usage limit remain.
 
 **Deployed on 2026-10-28:** the alpha panel at
 [`agent.invincible.sh`](https://agent.invincible.sh) runs the gateway, Autobot and

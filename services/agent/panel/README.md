@@ -5,9 +5,11 @@ process with no runtime dependencies and no build step.
 
 - **Overview:** gateway models and node identity, the agent's tasks and conversations, today's
   tokens and cost, and the approvals waiting.
-- **Chat:** a conversation transcript, a live turn, and a new conversation. The versioned stream
-  (`spec/agent.md`, Turn events) gives text and reasoning deltas, tool starts and outputs, diffs,
-  approval cards, receipts and the final answer; the session id comes back in `X-Session-Id`.
+- **Chat:** a conversation transcript, a live turn, a new conversation, and **Keep going** for a
+  delegated run. The versioned stream (`spec/agent.md`, Turn events) gives text and reasoning
+  deltas, tool starts and outputs, diffs, approval cards, receipts and the final answer; a
+  delegated run also reports its nudges and any declined approval. The session id comes back in
+  `X-Session-Id`.
 - **Workspaces:** start a thread (a git worktree and branch from the bot's project), put it in
   Chat with **Use**, read its **Diff**, open a **PR**, or remove it. A removed thread leaves a
   tombstone so its old session cannot silently use the main checkout.

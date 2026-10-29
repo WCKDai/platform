@@ -445,6 +445,8 @@ const server = http.createServer(async (request, response) => {
       if (!text) return json(response, 400, { error: "the task is empty" });
       if (text.length > 8000) return json(response, 400, { error: "the task is longer than 8000 characters" });
       if (!validId(id)) return json(response, 400, { error: "the session id is not valid" });
+      const turnBody = { text };
+      if (payload.delegated !== undefined) turnBody.delegated = payload.delegated;
       const reply = await fetch(`${AGENT}/v1/agent/sessions/${encodeURIComponent(id)}/turns`, {
         method: "POST",
         headers: {
@@ -452,8 +454,8 @@ const server = http.createServer(async (request, response) => {
           "Content-Type": "application/json",
           Accept: "text/event-stream",
         },
-        body: JSON.stringify({ text }),
-        signal: AbortSignal.timeout(15 * 60_000),
+        body: JSON.stringify(turnBody),
+        signal: AbortSignal.timeout((payload.delegated ? 60 : 15) * 60_000),
       });
       securityHeaders(response);
       response.writeHead(reply.status, {

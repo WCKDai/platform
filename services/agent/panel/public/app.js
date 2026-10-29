@@ -197,6 +197,11 @@ function liveBubble() {
   return live;
 }
 
+function clearLive() {
+  if (live) live.remove();
+  live = null;
+}
+
 function appendDetails(summary, text, kind = "tool") {
   const chat = $("chat");
   if (chat.querySelector(".muted") && chat.children.length === 1) chat.innerHTML = "";
@@ -298,6 +303,45 @@ function handleStreamEvent(event) {
     appendBubble("error", event.text || "error");
     return;
   }
+  if (event.type === "delegate.started") {
+    appendBubble("note", `delegated: up to ${event.max_nudges ?? 0} nudges, approvals declined${event.until ? ` · ${event.until}` : ""}`);
+    return;
+  }
+  if (event.type === "delegate.nudge") {
+    live = null;
+    appendBubble("note", `delegated nudge ${event.number}/${event.of} · ${event.reason || "continue"}`);
+    return;
+  }
+  if (event.type === "delegate.declined") {
+    live = null;
+    appendDetails("delegated · approval declined", event.text || "");
+    return;
+  }
+  if (event.type === "delegate.stalled") {
+    live = null;
+    appendBubble("note", `delegated: stalled after ${event.seconds ?? "?"}s`);
+    return;
+  }
+  if (event.type === "delegate.waiting") {
+    live = null;
+    appendBubble("note", `delegated: usage limit; waiting ${event.seconds ?? "?"}s`);
+    return;
+  }
+  if (event.type === "delegate.paused") {
+    live = null;
+    appendBubble("note", `delegated: paused until ${event.retry_at_local || "the limit clears"}`);
+    return;
+  }
+  if (event.type === "delegate.finished") {
+    clearLive();
+    appendBubble("note", `delegated: ${event.nudges ?? 0} nudges, ${event.declined ?? 0} declined${event.waiting_on_owner ? " · waiting for you" : ""}`);
+    return;
+  }
+  if (event.type === "delegate.stopped") {
+    live = null;
+    appendBubble("note", `delegated stopped: ${event.reason || "stopped"}`);
+    return;
+  }
   if (event.type === "refused") appendBubble("note", `refused: ${event.text || ""}`);
   else if (event.type === "receipt") {
     appendBubble("receipt", `receipt ${String(event.id || "").slice(0, 8)}${event.model ? ` · ${event.model}` : ""}${event.tier ? ` · ${event.tier}` : ""}`);
@@ -312,6 +356,7 @@ async function runChat(event) {
   const textValue = input.value.trim();
   if (!textValue) return;
   const session = $("chat-session").value.trim();
+  const keepGoing = $("chat-delegate").checked;
   const button = $("chat-send");
   busy = true;
   button.disabled = true;
@@ -319,10 +364,12 @@ async function runChat(event) {
   appendBubble("user", textValue);
   input.value = "";
   try {
+    const body = { text: textValue, session };
+    if (keepGoing) body.delegated = { max_nudges: 2 };
     const response = await api("/api/task", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: textValue, session }),
+      body: JSON.stringify(body),
     });
     const assigned = response.headers.get("X-Session-Id");
     if (assigned) {
