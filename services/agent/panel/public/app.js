@@ -29,6 +29,7 @@ let variables = [];
 let subscriptions = [];
 let delegationData = {};
 let providerList = [];
+let gatewayProviders = [];
 let adapters = [];
 let secretList = [];
 let paletteIndex = 0;
@@ -99,7 +100,10 @@ function showView(name) {
   $("page-subtitle").textContent = subtitle;
   document.title = `${title} · Invincible Control`;
   if (location.hash.slice(1) !== name) history.replaceState(null, "", name === "overview" ? location.pathname : `#${name}`);
-  if (name === "providers") loadProviders();
+  if (name === "providers") {
+    loadProviders();
+    loadProviderAdmin();
+  }
   if (name === "project") {
     fillProjectSelect();
     loadProject($("project-select").value);
@@ -833,7 +837,7 @@ function renderProviders(gateway, agent, settingsValue) {
     .join("");
   select.innerHTML = options;
   select.value = current;
-  $("provider-note").textContent = `The gateway serves these models at ${settingsValue?.gateway?.url || "the configured URL"}. Provider keys stay in the gateway (Coolify's environment or the node's config); the panel never sees them.`;
+  $("provider-note").textContent = `The gateway serves these models at ${settingsValue?.gateway?.url || "the configured URL"}. Provider keys are written by the form below; the gateway keeps them and never sends a key back to this browser.`;
 }
 
 function renderSettings(section, agent, gateway) {
@@ -1300,6 +1304,146 @@ async function removeSecret(name) {
   }
 }
 
+function setSelectValue(select, value) {
+  if (![...select.options].some((option) => option.value === value)) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = value;
+    select.append(option);
+  }
+  select.value = value;
+}
+
+function renderGatewayProviders(data) {
+  const providers = data?.providers || [];
+  gatewayProviders = providers;
+  $("gateway-providers").innerHTML = providers.length
+    ? providers
+        .map((provider) => {
+          const tone = provider.loaded ? (provider.healthy ? "" : "bad") : "quiet";
+          const status = provider.loaded ? (provider.healthy ? "ready" : "down") : "not loaded";
+          const key = provider.key === "environment" ? "environment" : provider.key === "set" ? "set" : "missing";
+          return `<tr><td><strong>${esc(provider.id)}</strong></td><td class="mono">${esc(provider.upstream_model || "—")}</td><td class="muted">${esc(provider.host || provider.base_url || "—")}</td><td><span class="badge quiet">${esc(provider.data_policy || "unknown")}</span></td><td class="mono">${esc(key)}</td><td><span class="badge ${tone}">${esc(status)}</span></td><td><div class="thread-actions"><button class="mini" type="button" data-provider-edit="${esc(provider.id)}">Edit</button><button class="mini no" type="button" data-provider-remove="${esc(provider.id)}">Remove</button></div></td></tr>`;
+        })
+        .join("")
+    : `<tr><td colspan="7" class="muted">No cloud providers. Add one below; the gateway hot-loads it.</td></tr>`;
+  const bits = [`egress ${data?.egress || "unknown"}`, `network ${data?.network || "unknown"}`];
+  if (data?.egress === "never") bits.push("cloud providers are configured but egress is never; the gateway will refuse them until [node] egress is ask or auto");
+  $("provider-output").textContent = bits.join(" · ");
+}
+
+async function loadProviderAdmin() {
+  try {
+    const response = await api("/api/providers");
+    if (!response.ok) throw new Error(`providers ${response.status}`);
+    renderGatewayProviders(await response.json());
+  } catch (error) {
+    $("gateway-providers").innerHTML = `<tr><td colspan="7" class="muted">${esc(error.message || error)}</td></tr>`;
+  }
+}
+
+const PROVIDER_PRESETS = {
+  anthropic: { url: "https://api.anthropic.com/v1", model: "claude-sonnet-5-5", context: 200000, policy: "retention:30" },
+  openai: { url: "https://api.openai.com/v1", model: "", context: 128000, policy: "retention:30" },
+  deepseek: { url: "https://api.deepseek.com/v1", model: "deepseek-chat", context: 64000, policy: "trains" },
+  openrouter: { url: "https://openrouter.ai/api/v1", model: "", context: "", policy: "unknown" },
+};
+
+function applyProviderPreset() {
+  const preset = PROVIDER_PRESETS[$("provider-preset").value];
+  if (!preset) return;
+  $("provider-url").value = preset.url;
+  $("provider-model").value = preset.model;
+  $("provider-context").value = preset.context ?? "";
+  $("provider-policy").value = preset.policy;
+  if (!$("provider-id").value) $("provider-id").value = $("provider-preset").value;
+}
+
+function resetProviderForm() {
+  $("provider-form").reset();
+  $("provider-edit-id").value = "";
+  $("provider-id").disabled = false;
+  $("provider-form-title").textContent = "Add a provider";
+  $("provider-cancel").hidden = true;
+  $("provider-key").placeholder = "Required for a new provider";
+  $("provider-form-output").textContent = "";
+  $("provider-form-status").textContent = "The key is never returned to this browser.";
+}
+
+function editProvider(id) {
+  const provider = gatewayProviders.find((item) => item.id === id);
+  if (!provider) return;
+  $("provider-edit-id").value = provider.id;
+  $("provider-preset").value = "custom";
+  $("provider-id").value = provider.id;
+  $("provider-id").disabled = true;
+  $("provider-model").value = provider.upstream_model || "";
+  $("provider-url").value = provider.base_url || "";
+  $("provider-key").value = "";
+  $("provider-key").placeholder = "Leave blank to keep the current key";
+  $("provider-context").value = provider.context || "";
+  setSelectValue($("provider-policy"), provider.data_policy || "unknown");
+  $("provider-vision").value = provider.vision === true ? "true" : provider.vision === false ? "false" : "";
+  $("provider-form-title").textContent = `Edit ${provider.id}`;
+  $("provider-cancel").hidden = false;
+  $("provider-form-output").textContent = "";
+  $("provider-form-status").textContent = "Saving replaces this provider and hot-loads the change.";
+}
+
+async function saveProvider(event) {
+  event.preventDefault();
+  const edit = $("provider-edit-id").value;
+  const id = edit || $("provider-id").value.trim();
+  if (!id) {
+    toast("Give the provider an id", "bad");
+    return;
+  }
+  const key = $("provider-key").value.trim();
+  const vision = $("provider-vision").value;
+  const payload = {
+    id,
+    provider: $("provider-preset").value,
+    upstream_model: $("provider-model").value.trim() || null,
+    base_url: $("provider-url").value.trim() || null,
+    context: Number($("provider-context").value) || null,
+    data_policy: $("provider-policy").value,
+    vision: vision === "" ? null : vision === "true",
+  };
+  if (key) payload.api_key = key;
+  $("provider-form-status").textContent = "Saving…";
+  try {
+    const saved = await write("/api/providers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    $("provider-form-output").textContent = `${saved.id} · ${saved.upstream_model} at ${saved.base_url}
+key ${saved.key} · ${saved.loaded ? "loaded now" : "not loaded"}`;
+    $("provider-key").value = "";
+    resetProviderForm();
+    $("provider-form-output").textContent = `${saved.id} saved and loaded by the gateway.`;
+    toast(key ? "Provider saved with its key" : "Provider saved", "good");
+    await loadProviderAdmin();
+    await refresh();
+  } catch (error) {
+    $("provider-form-status").textContent = String(error.message || error);
+    $("provider-form-output").textContent = String(error.message || error);
+    toast(String(error.message || error), "bad");
+  }
+}
+
+async function removeProvider(id) {
+  if (!confirm(`Remove provider ${id}? Its key file is deleted and the gateway stops routing to it.`)) return;
+  try {
+    await write(`/api/providers/${encodeURIComponent(id)}`, { method: "DELETE" });
+    toast(`${id} removed`, "good");
+    await loadProviderAdmin();
+    await refresh();
+  } catch (error) {
+    toast(String(error.message || error), "bad");
+  }
+}
+
 async function loadProviders() {
   try {
     const response = await api("/api/adapters");
@@ -1501,7 +1645,10 @@ async function refresh() {
     setStatus(online ? "online" : "offline", online ? "online" : "degraded");
     $("updated").textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
     $("footer-status").textContent = online ? "all systems answer" : "one service is not answering";
-    if (currentView === "providers") loadProviders();
+    if (currentView === "providers") {
+      loadProviders();
+      loadProviderAdmin();
+    }
   } catch (error) {
     setStatus("offline", error.message || "unreachable");
   }
@@ -1529,6 +1676,9 @@ function bind() {
   $("subscription-cancel").addEventListener("click", resetSubscriptionForm);
   $("config-form").addEventListener("submit", setConfig);
   $("model-save").addEventListener("click", setModel);
+  $("provider-form").addEventListener("submit", saveProvider);
+  $("provider-cancel").addEventListener("click", resetProviderForm);
+  $("provider-preset").addEventListener("change", applyProviderPreset);
   $("approvals-save").addEventListener("click", setApprovals);
   $("check-save").addEventListener("click", saveCheck);
   $("project-select").addEventListener("change", () => loadProject($("project-select").value));
@@ -1537,14 +1687,6 @@ function bind() {
   $("adapter-run").addEventListener("click", runAdapter);
   $("refresh").addEventListener("click", refresh);
   $("palette").addEventListener("click", openPalette);
-  $("copy-provider-command").addEventListener("click", async () => {
-    try {
-      await navigator.clipboard.writeText($("provider-setup-command").textContent);
-      toast("Provider command copied", "good");
-    } catch {
-      toast("Could not copy; select the command instead", "bad");
-    }
-  });
   $("logout").addEventListener("click", logout);
   $("palette-input").addEventListener("input", (event) => {
     paletteIndex = 0;
@@ -1602,6 +1744,8 @@ function bind() {
     else if (button.dataset.connector) toggleConnector(button.dataset.connector, button.dataset.bot, button.dataset.on === "1");
     else if (button.dataset.toolGroup) toggleToolGroup(button.dataset.toolGroup, button.dataset.on);
     else if (button.dataset.variable) removeVariable(button.dataset.variable);
+    else if (button.dataset.providerEdit) editProvider(button.dataset.providerEdit);
+    else if (button.dataset.providerRemove) removeProvider(button.dataset.providerRemove);
     else if (button.dataset.delegationResume) delegationAction(button.dataset.delegationResume, "resume");
     else if (button.dataset.delegationCancel) delegationAction(button.dataset.delegationCancel, "cancel");
     else if (button.dataset.subscriptionEdit) editSubscription(button.dataset.subscriptionEdit);

@@ -13,7 +13,8 @@ mkdir -p "$INVINCIBLE_HOME"
 umask 077
 printf '%s\n' "$INVINCIBLE_TOKEN" > "$INVINCIBLE_HOME/token"
 
-cat > "$INVINCIBLE_HOME/config.toml" <<EOF
+if [ ! -f "$INVINCIBLE_HOME/config.toml" ] || [ "${INVINCIBLE_CONFIG_FORCE:-0}" = "1" ]; then
+  cat > "$INVINCIBLE_HOME/config.toml" <<EOF
 [node]
 network = "direct"
 egress = "auto"
@@ -26,5 +27,10 @@ api_key_env = "CLOUD_API_KEY"
 context = $CLOUD_CONTEXT
 data_policy = "unknown"
 EOF
+else
+  # Providers added from the panel are written here; keep them across restarts. Set
+  # INVINCIBLE_CONFIG_FORCE=1 on the service to regenerate from the environment instead.
+  echo "keeping $INVINCIBLE_HOME/config.toml (set INVINCIBLE_CONFIG_FORCE=1 to regenerate)"
+fi
 
 exec invincible serve

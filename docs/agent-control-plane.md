@@ -192,6 +192,17 @@ conversation with a done count, and a reset clears it while a fork copies it. On
 codeword reached the model and a `todo` plan was written, shown and survived reopening the
 conversation.
 
+**Shipped in 0.0.30:** the gateway's provider admin is live. `GET /v1/admin/providers`,
+`POST /v1/admin/providers` and `DELETE /v1/admin/providers/{id}` edit the gateway's config and
+key files and **hot-load** the cloud model list: a request in flight keeps its model, the next
+request sees the change. A key is written once to `keys/<id>` (0600) and never returned. The
+panel's **Providers** page replaces the node command with a preset form and a configured-provider
+table with edit/remove, all behind the gateway token. The gateway container now keeps an existing
+`config.toml` across restarts, so a provider added from the panel survives; `INVINCIBLE_CONFIG_FORCE=1`
+regenerates the seeded config when needed. Unit/API tests cover add, update, remove, a key staying
+write-only, an environment-key provider keeping its source, and the model appearing in `/v1/models`
+without a restart; the panel flow was exercised against a live gateway.
+
 **Deployed on 2026-10-29:** the alpha panel at
 [`agent.invincible.sh`](https://agent.invincible.sh) runs the gateway, Autobot and panel together
 in the PolyCore Coolify project, now at **0.0.29** (panel 0.1.4). All three are healthy; login,

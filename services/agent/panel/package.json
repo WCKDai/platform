@@ -1,6 +1,6 @@
 {
   "name": "wckd-agent-panel",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "private": true,
   "type": "module",
   "description": "Authenticated control panel for Invincible and Autobot",

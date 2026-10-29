@@ -23,7 +23,7 @@ name: wckd-agent-coolify
 
 services:
   gateway:
-    image: ${GATEWAY_IMAGE:-wckd-agent-stack/wckd-invincible-gateway:v0.0.29}
+    image: ${GATEWAY_IMAGE:-wckd-agent-stack/wckd-invincible-gateway:v0.0.30}
     pull_policy: never
     restart: unless-stopped
     environment:
@@ -45,7 +45,7 @@ services:
       start_period: 10s
 
   agent:
-    image: ${AUTOBOT_IMAGE:-wckd-agent-stack/wckd-autobot:v0.0.29}
+    image: ${AUTOBOT_IMAGE:-wckd-agent-stack/wckd-autobot:v0.0.30}
     pull_policy: never
     restart: unless-stopped
     network_mode: "service:gateway"
@@ -74,7 +74,7 @@ services:
       start_period: 10s
 
   panel:
-    image: ${PANEL_IMAGE:-wckd-agent-stack/wckd-agent-panel:v0.0.29}
+    image: ${PANEL_IMAGE:-wckd-agent-stack/wckd-agent-panel:v0.0.30}
     pull_policy: never
     restart: unless-stopped
     network_mode: "service:gateway"

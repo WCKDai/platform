@@ -11,7 +11,7 @@
 set -eu
 
 HOST="${ALPHA_HOST:?set ALPHA_HOST, for example root@62.83.75.115}"
-VERSION="${VERSION:-v0.0.29}"
+VERSION="${VERSION:-v0.0.30}"
 
 ssh -o BatchMode=yes "$HOST" sh -s -- "$VERSION" <<'REMOTE'
 set -eu

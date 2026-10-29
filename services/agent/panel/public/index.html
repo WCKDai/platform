@@ -253,26 +253,46 @@
             </article>
 
             <article class="card wide">
+              <div class="card-head"><h2>Gateway providers</h2><span class="badge quiet">hot reload</span></div>
+              <p class="small">Cloud backends the gateway routes to. A change is written to the gateway's config and loaded on the next request; no restart. The key is write-only.</p>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Provider</th><th>Model</th><th>Endpoint</th><th>Policy</th><th>Key</th><th>Status</th><th></th></tr></thead>
+                  <tbody id="gateway-providers"><tr><td colspan="7" class="muted">Reading gateway providers…</td></tr></tbody>
+                </table>
+              </div>
+              <pre id="provider-output" class="output"></pre>
+            </article>
+
+            <article class="card wide">
+              <div class="card-head"><h2 id="provider-form-title">Add a provider</h2><button id="provider-cancel" class="ghost mini" type="button" hidden>Cancel edit</button></div>
+              <form id="provider-form" class="task form-grid">
+                <input id="provider-edit-id" type="hidden">
+                <div class="field"><label for="provider-preset">Preset</label><select id="provider-preset">
+                  <option value="custom">custom</option><option value="anthropic">Anthropic</option><option value="openai">OpenAI</option><option value="deepseek">DeepSeek</option><option value="openrouter">OpenRouter</option>
+                </select></div>
+                <div class="field"><label for="provider-id">ID</label><input id="provider-id" type="text" maxlength="64" placeholder="claude" required autocomplete="off" spellcheck="false"></div>
+                <div class="field"><label for="provider-model">Provider model</label><input id="provider-model" type="text" maxlength="120" placeholder="claude-sonnet-5-5" autocomplete="off" spellcheck="false"></div>
+                <div class="field"><label for="provider-key">API key</label><input id="provider-key" type="password" maxlength="500" placeholder="Required for a new provider" autocomplete="new-password" spellcheck="false"></div>
+                <div class="field wide"><label for="provider-url">Base URL</label><input id="provider-url" type="url" maxlength="300" placeholder="https://api.anthropic.com/v1" autocomplete="off" spellcheck="false"></div>
+                <div class="field"><label for="provider-context">Context</label><input id="provider-context" type="number" min="1" step="1" placeholder="200000"></div>
+                <div class="field"><label for="provider-policy">Data policy</label><select id="provider-policy">
+                  <option value="unknown">unknown</option><option value="no-retention">no retention</option><option value="retention:30">retention: 30 days</option><option value="retention:7">retention: 7 days</option><option value="trains">trains</option><option value="owned">owned</option>
+                </select></div>
+                <div class="field"><label for="provider-vision">Vision</label><select id="provider-vision"><option value="">auto</option><option value="true">yes</option><option value="false">no</option></select></div>
+                <div class="row"><button class="primary" type="submit">Save provider</button><span id="provider-form-status" class="small muted">The key is never returned to this browser.</span></div>
+              </form>
+              <pre id="provider-form-output" class="output"></pre>
+            </article>
+
+            <article class="card wide">
               <div class="card-head"><h2>Agent providers</h2><span class="badge quiet">installed on this machine</span></div>
-              <p class="small">These are the coding CLIs detected on this machine. They use their own accounts; the gateway never sees those credentials. Handing work to them through Autobot is the adapter step still to come.</p>
+              <p class="small">These are the coding CLIs detected on this machine. They use their own accounts; the gateway never sees those credentials. Run one from <strong>Run an adapter</strong> below.</p>
               <div class="table-wrap">
                 <table>
                   <thead><tr><th>Provider</th><th>Version</th><th>Auth</th><th>Capabilities</th><th>Status</th></tr></thead>
                   <tbody id="agent-providers"><tr><td colspan="5" class="muted">Detecting installed providers…</td></tr></tbody>
                 </table>
-              </div>
-            </article>
-
-            <article class="card wide">
-              <div class="card-head"><h2>Add a gateway provider</h2><span class="badge quiet">node-side key</span></div>
-              <p class="small">The gateway owns provider keys. On the node, run the command for the provider you want; it prompts for the key. The model appears here after the gateway restarts.</p>
-              <pre id="provider-setup-command" class="output">invincible cloud add anthropic --id claude
-# or: invincible cloud add openai --id gpt
-# or: invincible cloud add openrouter --id openrouter
-# or: invincible cloud add custom --id my-provider --base-url https://host/v1 --model my-model</pre>
-              <div class="row">
-                <button id="copy-provider-command" class="ghost mini" type="button">Copy command</button>
-                <span class="small muted">A provider key is never sent to this browser again.</span>
               </div>
             </article>
 

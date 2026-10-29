@@ -9,7 +9,7 @@ import path from "node:path";
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(DIR, "public");
-const VERSION = "0.1.4";
+const VERSION = "0.1.5";
 const PORT = Number(process.env.PORT || 7800);
 const BIND = process.env.PANEL_BIND || "0.0.0.0";
 const GATEWAY = (process.env.GATEWAY_HTTP_URL || process.env.GATEWAY_URL || "http://127.0.0.1:7777")
@@ -594,11 +594,26 @@ const server = http.createServer(async (request, response) => {
     }
 
     if (url.pathname === "/api/providers" && request.method === "GET") {
-      const [models, providers] = await Promise.all([
-        safely(GATEWAY, "/v1/models"),
-        safely(AGENT, "/v1/agent/providers"),
-      ]);
-      return json(response, 200, { models, providers });
+      const result = await safely(GATEWAY, "/v1/admin/providers");
+      return json(response, result.status || 502, result.value);
+    }
+
+    if (url.pathname === "/api/providers" && request.method === "POST") {
+      // The key is in this body once; it is forwarded to the gateway and never echoed.
+      const payload = JSON.parse(await body(request, 64 * 1024));
+      const result = await upstream(GATEWAY, "/v1/admin/providers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      return json(response, result.status, result.value);
+    }
+
+    const providerPath = url.pathname.match(/^\/api\/providers\/([^/]+)$/);
+    if (providerPath && request.method === "DELETE") {
+      const id = decodeURIComponent(providerPath[1]);
+      const result = await upstream(GATEWAY, `/v1/admin/providers/${encodeURIComponent(id)}`, { method: "DELETE" });
+      return json(response, result.status, result.value);
     }
 
     if (url.pathname === "/api/secrets" && request.method === "GET") {
