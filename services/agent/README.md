@@ -197,13 +197,16 @@ every registry.
 - all three containers healthy (`gateway`, `agent`, `panel`); both binaries report `0.0.27`;
 - Let's Encrypt on the origin and a Cloudflare edge certificate on the public name;
 - login 303, dashboard and `/api/overview` 200, a missing CSRF token 403, logout 200;
-- the panel's rooms load: Overview, Chat, Workspaces, Bots, Integrations, Usage and Settings;
+- the panel's rooms load: Overview, Chat, Workspaces, Agents, Providers, Secrets, Variables,
+  Subscriptions, Integrations, Usage and Settings;
 - an answer turn returned `alpha` with a gateway receipt; a tool turn wrote a file in `/workspace`;
 - a thread was created from the project in `/workspace`, a tool task wrote inside its worktree,
   the panel streamed the live turn with diffs and tool outputs, and **PR** committed, pushed and
   opened a real GitHub pull request through the PAT alone (Workflows write); the panel returned
   `pr_url`/`pr_number`; the test PR was closed, its branch deleted and the thread removed;
-- Playwright drove the chat and thread flows with no page errors;
+- Playwright drove the chat and thread flows, the provider detection (Autobot installed; the
+  external CLIs reported not found inside the container), variable add/remove, subscription
+  add/remove and secret add/remove, with no page errors;
 - a delegated **Keep going** run listed `/workspace` and reported its summary;
 - a delegated run whose task said "ask me, do not guess, then wait for my answer" showed
   `delegated: questions go to you`, made no nudge, created no file, and ended waiting for the
