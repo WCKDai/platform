@@ -217,3 +217,17 @@ CSRF, overview, brief and plan, **Delegations**, **Project**, and a cloud provid
 locally; the compose uses `pull_policy: never`, so no registry (loopback or GHCR) is in the alpha
 path. GHCR packages remain optional for internal CI. The test brief, plan, session and provider
 were removed after verification; the gateway config is back to the one `cheap` provider.
+
+**Panel 0.2.0:** the control panel is the operator surface for four jobs. Chat searches
+conversations and the transcript, sends images with a turn, and folds text attachments into the
+message. Mission puts the project brief, the todo plan, the team board, worktrees and delegated
+runs on one page. Botmode shows each bot's status, channels and current work, and can open a chat
+with that bot. Studio queues image and speech jobs on the gateway (`[[images]]`, `[[speech]]`) and
+video jobs on a rented ComfyUI session. GPU rental proxies `/v1/rent/*`: EU or EU-secure only, a
+confirm step that shows the offer, hourly price, hours and estimated total before
+`invincible-confirmed: 1` (the node ignores a body `confirm`),
+and a live session card with countdown, cost so far and Stop. When the gateway has no rent route
+the room says the rental is not connected. The browser still never sees a provider key or a pod
+URL. Controls are Web Awesome 3.14.0 (MIT), vendored under `services/agent/panel/public/vendor/`
+(about 730 KiB, no CDN, no build). The theme is the panel's own tokens: dark ink, hairline rules,
+WCKD purple. CSP, CSRF and the signed session cookie are unchanged. Deploy workflows were not run.
