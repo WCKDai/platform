@@ -798,6 +798,7 @@ function renderSettings(section, agent, gateway) {
   }
   settings = data;
   $("approvals-select").value = data.approvals?.mode || "ask";
+  $("check-command").value = data.agent?.check || "";
   $("agent-settings").innerHTML = [
     ["bot", data.bot + (data.default ? " (default)" : "")],
     ["workdir", data.agent?.workdir],
@@ -834,6 +835,20 @@ async function setModel() {
     await refresh();
   } catch (error) {
     $("config-output").textContent = String(error.message || error);
+  }
+}
+
+async function saveCheck() {
+  try {
+    await write("/api/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: "agent.check", value: $("check-command").value.trim(), literal: true }),
+    });
+    toast("Verification check saved", "good");
+    await refresh();
+  } catch (error) {
+    toast(String(error.message || error), "bad");
   }
 }
 
@@ -1231,6 +1246,7 @@ function bind() {
   $("config-form").addEventListener("submit", setConfig);
   $("model-save").addEventListener("click", setModel);
   $("approvals-save").addEventListener("click", setApprovals);
+  $("check-save").addEventListener("click", saveCheck);
   $("refresh").addEventListener("click", refresh);
   $("palette").addEventListener("click", openPalette);
   $("copy-provider-command").addEventListener("click", async () => {

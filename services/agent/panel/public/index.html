@@ -399,6 +399,13 @@ telegram = true</pre>
               <div id="tools" class="list"><p class="muted">Reading tools…</p></div>
             </article>
 
+            <article class="card">
+              <div class="card-head"><h2>Verification</h2><span class="badge quiet">before finishing</span></div>
+              <div class="field"><label for="check-command">Check command</label><input id="check-command" type="text" maxlength="500" placeholder="cargo test" autocomplete="off" spellcheck="false"></div>
+              <div class="row"><button id="check-save" class="primary" type="button">Save check</button></div>
+              <p class="small">After a turn changes files, this runs where commands run. A failure goes back to the model once, then the turn stops with the failure visible.</p>
+            </article>
+
             <article class="card wide">
               <div class="card-head"><h2>Agent</h2><span class="badge quiet">read-only</span></div>
               <div id="agent-settings" class="list muted">—</div>
