@@ -153,7 +153,9 @@ gh workflow run deploy-agent-coolify.yml -R WCKDai/platform
 `load-alpha-images.sh` pins the public key in `RELEASE_KEY.pub` (fingerprint
 `SHA256:pUnu93DCCD+JwjrBHZLb+syi8tFMR/SpScWVwHGJvrQ`), verifies `SHA256SUMS` against the
 release's signature, loads the three images as `wckd-agent-stack/*:v0.0.26`, and checks their
-tags. The compose uses `pull_policy: never`, and the deploy workflow sets Coolify's
+tags. To rotate the key, replace `RELEASE_KEY.pub`, set the `AGENT_IMAGES_SIGNING_KEY` secret to
+the new private key, pin the new public key in `load-alpha-images.sh`, and publish a new
+`agent-images-*` release. The compose uses `pull_policy: never`, and the deploy workflow sets Coolify's
 `docker_compose_custom_build_command` to a no-op `echo`, so Coolify skips its pre-deploy pull. No
 registry credential, loopback registry or private GHCR access is involved. The GHCR packages from
 `agent-stack.yml` remain optional and are not used by the alpha.

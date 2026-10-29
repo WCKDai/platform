@@ -1,5 +1,8 @@
 name: Agent stack
 
+# Optional private GHCR images for maintainers. The alpha does not use these packages: it loads
+# the public, signed release tarballs from agent-images.yml with pull_policy: never.
+
 # Test the panel and both compose files on every change; publish the gateway, agent and panel
 # images on main. Deployment is the separate deploy-agent-coolify workflow (the alpha path); the
 # host-networking alternative is scripts/deploy-alpha.sh.
