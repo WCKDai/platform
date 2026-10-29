@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createHash } from "node:crypto";
 import { scryptSync, randomBytes } from "node:crypto";
+import { fileURLToPath } from "node:url";
 
 const PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
@@ -114,7 +115,7 @@ const agent = await listen((req, res) => {
 
 const port = 8791;
 const panel = spawn(process.execPath, ["server.mjs"], {
-  cwd: new URL("..", import.meta.url).pathname,
+  cwd: fileURLToPath(new URL("..", import.meta.url)),
   env: {
     ...process.env,
     PORT: String(port),
@@ -157,7 +158,7 @@ async function login() {
 test("health, login and every room", async () => {
   const health = await fetch(`http://127.0.0.1:${port}/healthz`);
   assert.equal(health.status, 200);
-  assert.equal((await health.json()).version, "0.2.0");
+  assert.equal((await health.json()).version, "0.2.1");
   const bad = await fetch(`http://127.0.0.1:${port}/api/overview`);
   assert.equal(bad.status, 401);
   const cookie = await login();

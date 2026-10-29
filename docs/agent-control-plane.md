@@ -231,3 +231,11 @@ the room says the rental is not connected. The browser still never sees a provid
 URL. Controls are Web Awesome 3.14.0 (MIT), vendored under `services/agent/panel/public/vendor/`
 (about 730 KiB, no CDN, no build). The theme is the panel's own tokens: dark ink, hairline rules,
 WCKD purple. CSP, CSRF and the signed session cookie are unchanged. Deploy workflows were not run.
+
+**Panel 0.2.1:** follow-up on the 0.2.0 review. Video jobs load `presets/comfyui-minimax-h3.json`
+(a checkpoint, the two CLIP encodes, a sampler, a decoder, and a video combine) instead of a
+graph that pointed at a missing node. Studio tabs reload the preset list. Chat reasoning starts
+a new block after another bubble, the live caret is cleared when a turn moves on, and Enter
+during IME composition does not send. Botmode reads delegations before it paints "working on".
+The mobile section drawer closes after a choice. Studio media is served only as image, audio, or
+video.

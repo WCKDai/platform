@@ -2,6 +2,12 @@
 // Media bytes stay in this process. The browser only receives same-origin URLs.
 
 import { randomBytes } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+
+const PRESETS = path.join(path.dirname(fileURLToPath(import.meta.url)), "presets");
+const MEDIA_TYPE = /^(image\/(png|jpeg|webp|gif)|video\/(mp4|webm)|audio\/(mpeg|wav|ogg))$/;
 
 const JOBS = 40;
 const MEDIA = 12;
@@ -21,8 +27,48 @@ function remember(bytes, type) {
   }
   if (bytes.length > MEDIA_BYTES) throw new Error("the result is larger than 24 MiB");
   const mediaId = id();
-  media.set(mediaId, { type, bytes });
+  media.set(mediaId, { type: safeMediaType(type), bytes });
   return mediaId;
+}
+
+export function safeMediaType(type) {
+  const base = String(type || "").split(";")[0].trim().toLowerCase();
+  return MEDIA_TYPE.test(base) ? base : "application/octet-stream";
+}
+
+export function workflowFor(presetId, prompt) {
+  const id = String(presetId || "comfyui-minimax-h3").replace(/[^A-Za-z0-9._-]/g, "");
+  const file = path.join(PRESETS, `${id}.json`);
+  let raw;
+  try {
+    raw = JSON.parse(readFileSync(file, "utf8"));
+  } catch {
+    throw new Error(`no ComfyUI workflow for preset ${id}`);
+  }
+  const graph = structuredClone(raw.prompt);
+  if (!graph || typeof graph !== "object") throw new Error(`preset ${id} has no prompt graph`);
+  const textNode = raw.prompt_node && graph[raw.prompt_node];
+  if (textNode?.inputs && "text" in textNode.inputs) textNode.inputs.text = String(prompt);
+  return graph;
+}
+
+export function graphProblems(graph) {
+  const ids = new Set(Object.keys(graph));
+  const problems = [];
+  const referenced = new Set();
+  for (const [nodeId, node] of Object.entries(graph)) {
+    if (!node?.class_type) problems.push(`${nodeId} has no class_type`);
+    for (const [key, value] of Object.entries(node?.inputs || {})) {
+      if (Array.isArray(value) && value.length >= 2 && (typeof value[0] === "string" || typeof value[0] === "number")) {
+        const target = String(value[0]);
+        if (!ids.has(target)) problems.push(`${nodeId}.${key} links to missing node ${target}`);
+        else referenced.add(target);
+      }
+    }
+  }
+  const outputs = Object.entries(graph).filter(([nodeId, node]) => !referenced.has(nodeId) && /video|save|combine/i.test(node.class_type || ""));
+  if (!outputs.length) problems.push("no video output node");
+  return problems;
 }
 
 function pushJob(job) {
@@ -42,15 +88,19 @@ function endpointUrl(session) {
   return url.replace(/\/+$/, "");
 }
 
-async function comfySubmit(base, prompt) {
+async function comfySubmit(base, prompt, preset) {
   const health = await fetch(`${base}/queue`, { signal: AbortSignal.timeout(8_000) });
   if (!health.ok) {
     return { status: "waiting", detail: `ComfyUI answered ${health.status} on this session.` };
   }
-  const graph = {
-    "6": { class_type: "CLIPTextEncode", inputs: { text: prompt, clip: ["4", 1] } },
-    "7": { class_type: "CLIPTextEncode", inputs: { text: "", clip: ["4", 1] } },
-  };
+  let graph;
+  try {
+    graph = workflowFor(preset, prompt);
+  } catch (error) {
+    return { status: "failed", detail: String(error.message || error) };
+  }
+  const problems = graphProblems(graph);
+  if (problems.length) return { status: "failed", detail: problems.join("; ") };
   const posted = await fetch(`${base}/prompt`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -154,7 +204,10 @@ export function createStudio({ upstream, safely, json, send, readBody, gateway }
     if (mediaPath && request.method === "GET") {
       const item = media.get(decodeURIComponent(mediaPath[1]));
       if (!item) return json(response, 404, { error: "no such file" });
-      return send(response, 200, item.bytes, item.type, { "Cache-Control": "private, max-age=3600" });
+      const type = safeMediaType(item.type);
+      const extra = { "Cache-Control": "private, max-age=3600" };
+      if (type === "application/octet-stream") extra["Content-Disposition"] = "attachment";
+      return send(response, 200, item.bytes, type, extra);
     }
 
     if (url.pathname === "/api/studio/jobs" && request.method === "POST") {
@@ -293,7 +346,7 @@ export function createStudio({ upstream, safely, json, send, readBody, gateway }
       }
       job.comfy_base = base;
       try {
-        const submitted = await comfySubmit(base, job.prompt);
+        const submitted = await comfySubmit(base, job.prompt, job.preset);
         job.status = submitted.status;
         job.detail = submitted.detail;
         job.comfy_id = submitted.comfy_id || "";

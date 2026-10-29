@@ -11,7 +11,7 @@ import { createStudio } from "./studio.mjs";
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(DIR, "public");
-const VERSION = "0.2.0";
+const VERSION = "0.2.1";
 const PORT = Number(process.env.PORT || 7800);
 const BIND = process.env.PANEL_BIND || "0.0.0.0";
 const GATEWAY = (process.env.GATEWAY_HTTP_URL || process.env.GATEWAY_URL || "http://127.0.0.1:7777")

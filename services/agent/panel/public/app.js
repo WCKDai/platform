@@ -340,7 +340,7 @@ function appendDetails(summary, text, kind = "tool") {
 }
 
 function appendApproval(event) {
-  live = null;
+  clearLive();
   const chat = $("chat");
   if (chat.querySelector(".muted") && chat.children.length === 1) chat.innerHTML = "";
   const node = document.createElement("div");
@@ -364,7 +364,7 @@ function appendApproval(event) {
 
 async function loadHistory(id) {
   selectedSession = id;
-  live = null;
+  clearLive();
   $("chat-session").value = id;
   $("chat-title").textContent = id;
   $("chat-session-label").textContent = "saved";
@@ -394,7 +394,8 @@ function handleStreamEvent(event) {
   if (event.type === "reasoning") {
     const text = event.delta || event.text || "";
     if (!text) return;
-    let node = $("chat").querySelector("[data-reasoning]");
+    const last = $("chat").lastElementChild;
+    let node = last?.dataset?.reasoning ? last : null;
     if (!node) {
       node = document.createElement("wa-details");
       node.dataset.reasoning = "1";
@@ -411,7 +412,7 @@ function handleStreamEvent(event) {
     return;
   }
   if (event.type === "tool") {
-    live = null;
+    clearLive();
     appendBubble("tool", `› ${event.text || "tool"}`);
     return;
   }
@@ -435,14 +436,14 @@ function handleStreamEvent(event) {
   if (event.type === "answer") {
     if (live) {
       live.textContent = event.text || live.textContent;
-      live = null;
+      clearLive();
     } else {
       appendBubble("assistant", event.text || "(no answer)");
     }
     return;
   }
   if (event.type === "error") {
-    live = null;
+    clearLive();
     appendBubble("error", event.text || "error");
     return;
   }
@@ -452,27 +453,27 @@ function handleStreamEvent(event) {
     return;
   }
   if (event.type === "delegate.nudge") {
-    live = null;
+    clearLive();
     appendBubble("note", `delegated nudge ${event.number}/${event.of} · ${event.reason || "continue"}`);
     return;
   }
   if (event.type === "delegate.declined") {
-    live = null;
+    clearLive();
     appendDetails("delegated · approval declined", event.text || "");
     return;
   }
   if (event.type === "delegate.stalled") {
-    live = null;
+    clearLive();
     appendBubble("note", `delegated: stalled after ${event.seconds ?? "?"}s`);
     return;
   }
   if (event.type === "delegate.waiting") {
-    live = null;
+    clearLive();
     appendBubble("note", `delegated: usage limit; waiting ${event.seconds ?? "?"}s`);
     return;
   }
   if (event.type === "delegate.paused") {
-    live = null;
+    clearLive();
     const job = event.job_id ? ` · job ${String(event.job_id).slice(0, 10)}` : "";
     const when = event.auto_resume ? "it resumes automatically" : "resume it from Delegations";
     appendBubble("note", `delegated: paused until ${event.retry_at_local || "the limit clears"} · ${when}${job}`);
@@ -484,7 +485,7 @@ function handleStreamEvent(event) {
     return;
   }
   if (event.type === "delegate.stopped") {
-    live = null;
+    clearLive();
     appendBubble("note", `delegated stopped: ${event.reason || "stopped"}`);
     return;
   }
@@ -515,7 +516,7 @@ async function runChat(event) {
   const button = $("chat-send");
   busy = true;
   button.disabled = true;
-  live = null;
+  clearLive();
   const bubble = appendBubble("user", message || "(image)");
   for (const image of images) {
     const pic = document.createElement("img");
@@ -571,7 +572,7 @@ async function runChat(event) {
     appendBubble("error", error.message || String(error));
   } finally {
     busy = false;
-    live = null;
+    clearLive();
     try {
       await refresh();
       await loadPlan();
@@ -583,7 +584,7 @@ async function runChat(event) {
 
 function newChat() {
   selectedSession = "";
-  live = null;
+  clearLive();
   $("chat-session").value = "";
   $("chat-title").textContent = "New conversation";
   $("chat-session-label").textContent = "not saved yet";
@@ -1705,7 +1706,7 @@ function openPalette() {
 }
 
 function closePalette() {
-  if ($("palette-modal").open) $("palette-modal").hide();
+  if ($("palette-modal").open) $("palette-modal").requestClose();
 }
 
 function paletteChoose(button) {
@@ -1730,10 +1731,10 @@ async function refresh() {
     renderThreads(data.threads);
     bots = value(data.bots)?.bots || [];
     await loadBoards();
+    renderDelegations(data.delegations);
     renderBots(data.bots);
     renderConnectors(data.bots);
     renderVariables(data.variables);
-    renderDelegations(data.delegations);
     renderSubscriptions(data.subscriptions);
     renderSecrets(data.secrets);
     renderUsage(data.agent, data.audit);
@@ -1767,7 +1768,10 @@ function bind() {
   $("nav").addEventListener("wa-selection-change", (event) => {
     if (navSync) return;
     const item = event.detail?.selection?.[0];
-    if (item?.dataset.view) showView(item.dataset.view);
+    if (item?.dataset.view) {
+      showView(item.dataset.view);
+      if ($("nav-drawer").open) $("nav-drawer").requestClose();
+    }
   });
   $("menu").addEventListener("click", (event) => {
     event.stopPropagation();
@@ -1791,7 +1795,7 @@ function bind() {
   $("studio-form").addEventListener("submit", submitStudio);
   $("studio-tabs").addEventListener("wa-tab-show", (event) => {
     studioKind = event.detail.name;
-    syncStudioFields();
+    loadStudio();
   });
   $("gpu-load").addEventListener("click", loadOffers);
   $("mission-thread").addEventListener("change", () => loadMission());
@@ -1843,7 +1847,7 @@ function bind() {
       else openPalette();
       return;
     }
-    if (event.key === "Enter" && !event.shiftKey && currentView === "chat" && event.composedPath().includes($("chat-text"))) {
+    if (event.key === "Enter" && !event.shiftKey && !event.isComposing && currentView === "chat" && event.composedPath().includes($("chat-text"))) {
       event.preventDefault();
       $("chat-form").requestSubmit();
       return;
@@ -1905,7 +1909,7 @@ function askConfirm(message, okLabel = "Confirm") {
     const finish = (value) => {
       if (settled) return;
       settled = true;
-      dialog.hide();
+      dialog.requestClose();
       resolve(value);
     };
     $("confirm-body").textContent = message;
@@ -1924,7 +1928,7 @@ function askPr(title, body) {
     const finish = (value) => {
       if (settled) return;
       settled = true;
-      dialog.hide();
+      dialog.requestClose();
       resolve(value);
     };
     $("pr-title").value = title;
@@ -2386,7 +2390,7 @@ async function quoteRent(offerId) {
       .map(([label, fact]) => `<div class="insight"><strong>${esc(label)}</strong><span>${esc(fact)}</span></div>`)
       .join("");
     $("rent-ok").onclick = () => confirmRent();
-    $("rent-cancel").onclick = () => $("rent-dialog").hide();
+    $("rent-cancel").onclick = () => $("rent-dialog").requestClose();
     $("rent-dialog").show();
   } catch (error) {
     toast(String(error.message || error), "bad");
@@ -2411,7 +2415,7 @@ async function confirmRent() {
       return;
     }
     if (!response.ok) throw new Error(data.error?.message || data.error || `HTTP ${response.status}`);
-    $("rent-dialog").hide();
+    $("rent-dialog").requestClose();
     toast("Rental started", "good");
     $("gpu-output").textContent = `session ${data.id || ""} · ${data.phase || "created"}`;
     await refreshGpuSessions();

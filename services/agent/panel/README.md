@@ -35,8 +35,10 @@ background, hairline rules, and WCKD purple (`#7C5CFF`, readable lilac `#9373FF`
   delegation, or a board task). Enable, disable, reload, or **Talk**, which opens Chat aimed at
   that bot.
 - **Studio:** image jobs go to the gateway `POST /v1/images/generations` (`[[images]]`). Audio
-  jobs go to `POST /v1/audio/speech` (`[[speech]]`). Video jobs go to a rented ComfyUI session
-  (preset `comfyui-minimax-h3`). The queue shows progress. Finished files are played from the
+  jobs go to `POST /v1/audio/speech` (`[[speech]]`). Video jobs go to a rented ComfyUI session.
+  The graph is `presets/comfyui-minimax-h3.json` (checkpoint, CLIP, sampler, decoder, video
+  combine); the prompt replaces `{{prompt}}`. Switching Image, Video, and Audio reloads that
+  tab's preset list. The queue shows progress. Finished files are played from the
   panel; the browser never receives a provider key or a pod URL. If a backend is missing, the job
   says so.
 - **GPU:** proxies the gateway's `/v1/rent/*` (offers, create, list, get, stop, health). Regions
