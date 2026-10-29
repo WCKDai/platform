@@ -140,19 +140,22 @@ application's **Environment** tab. The default public URL is
 `https://agent.invincible.sh`; pass the optional `domain` input to change it.
 The workflow waits for `running:healthy` and then checks `/healthz`.
 
-The GHCR packages built by `agent-stack.yml` are private, and the Coolify worker has no registry
-credential. The Coolify compose therefore pulls from a small registry on the host's loopback,
-populated by:
+The images are built by `.github/workflows/agent-images.yml` and published as **public, signed
+release assets** (the container tarballs, `SHA256SUMS` and its Ed25519 signature). The alpha
+verifies and loads them; it never contacts a registry:
 
 ```sh
-ALPHA_HOST=root@62.83.75.115 ./scripts/build-alpha-images.sh
+gh workflow run agent-images.yml -R WCKDai/platform -f version=v0.0.26
+ALPHA_HOST=root@62.83.75.115 ./scripts/load-alpha-images.sh
+gh workflow run deploy-agent-coolify.yml -R WCKDai/platform
 ```
 
-That clones `main` to `/opt/wckd-agent-src`, builds the gateway, agent and panel images, and
-pushes them to `127.0.0.1:5000`. Run it before deploying after a change to `services/agent` (or
-after a new release), then run the `deploy-agent-coolify` workflow. When the GHCR packages are
-public, set `GATEWAY_IMAGE`, `AUTOBOT_IMAGE` and `PANEL_IMAGE` in the Coolify application to those
-images and the local registry is no longer needed.
+`load-alpha-images.sh` pins the public key in `RELEASE_KEY.pub`, verifies `SHA256SUMS` against the
+release's signature, loads the three images as `wckd-agent-stack/*:v0.0.26`, and checks their
+tags. The compose uses `pull_policy: never`, and the deploy workflow sets Coolify's
+`docker_compose_custom_build_command` to a no-op `echo`, so Coolify skips its pre-deploy pull. No
+registry credential, loopback registry or private GHCR access is involved. The GHCR packages from
+`agent-stack.yml` remain optional and are not used by the alpha.
 
 This uses LiteLLM for model access, so it proves the agent + gateway + panel path without a GPU on
 the worker. To use a local model later, replace the cloud block in the gateway service with an
@@ -168,11 +171,10 @@ alternative for a dedicated Linux node that runs Invincible on the host itself.
 ALPHA_HOST=... ALPHA_USER=root ./scripts/deploy-alpha.sh
 ```
 
-The **agent-stack** workflow only tests and publishes images now; deployment is the Coolify
-workflow for alpha. The images are private by default. Set `GHCR_TOKEN` (a token with
-`read:packages`) and `GHCR_USER` in the environment used by `deploy-alpha.sh`, or make the three
-packages public, then the script logs in before `docker compose pull`. If you prefer to build on
-the host, run `docker compose up -d --build` with `images/autobot/bin/autobot` present.
+The **agent-stack** workflow tests and publishes optional GHCR images; the alpha uses the signed
+release tarballs above, not GHCR. The host-networking compose can still build locally with
+`docker compose up -d --build` and `images/autobot/bin/autobot` present. `deploy-alpha.sh` is for
+that dedicated-host path, not the Coolify alpha.
 
 ## Verification
 
@@ -185,7 +187,9 @@ the host, run `docker compose up -d --build` with `images/autobot/bin/autobot` p
 - A first task from the panel, then `docker compose logs -f agent panel caddy`.
 
 The 0.0.26 alpha stack is deployed through Coolify at
-`https://agent.invincible.sh` and was verified on 2026-10-29:
+`https://agent.invincible.sh` and was verified on 2026-10-29. The images are the public signed
+release tarballs from `agent-images-v0.0.26`; `pull_policy: never` keeps Coolify and Docker off
+every registry.
 
 - all three containers healthy (`gateway`, `agent`, `panel`); both binaries report `0.0.26`;
 - Let's Encrypt on the origin and a Cloudflare edge certificate on the public name;

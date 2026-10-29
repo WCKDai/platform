@@ -5,6 +5,9 @@ name: Deploy agent panel
 # and the LiteLLM key both live in the `infra` environment.
 #
 # The public panel defaults to `agent.invincible.sh`; set AGENT_PANEL_DOMAIN (or the domain input) to change it.
+# The three images must already be loaded on the alpha host from the public signed release
+# (services/agent/scripts/load-alpha-images.sh); this workflow tells Coolify to use the local
+# tags, skips its pre-deploy pull, and deploys.
 # Coolify generates the gateway token, the panel password and the session secret; they are visible
 # in the application's Environment tab, never in this log.
 
@@ -13,6 +16,10 @@ on:
     inputs:
       domain:
         description: "Public panel URL (blank: agent.invincible.sh)"
+        required: false
+        default: ""
+      image_tag:
+        description: "Agent image tag loaded on the host (blank: AGENT_IMAGE_TAG, or v0.0.26)"
         required: false
         default: ""
 
@@ -100,7 +107,7 @@ jobs:
           fi
           case "$domain" in https://*) ;; *) domain="https://$domain" ;; esac
           echo "DOMAIN=$domain" >>"$GITHUB_ENV"
-          body="$(jq -n --arg d "$domain" '{docker_compose_domains:[{name:"gateway",domain:$d}], ports_exposes:"7800"}')"
+          body="$(jq -n --arg d "$domain" '{docker_compose_domains:[{name:"gateway",domain:$d}], ports_exposes:"7800", docker_compose_custom_build_command:"echo images-loaded"}')"
           for attempt in 1 2 3 4 5; do
             response="$(curl -sS -w '\n%{http_code}' --max-time 30 -X PATCH \
               -H "Authorization: Bearer $COOLIFY_API_TOKEN" -H "Content-Type: application/json" \
@@ -121,6 +128,7 @@ jobs:
           CLOUD_MODEL: ${{ vars.AGENT_CLOUD_MODEL || 'cheap' }}
           CLOUD_API_KEY: ${{ secrets.LITELLM_MASTER_KEY }}
           CLOUD_CONTEXT: ${{ vars.AGENT_CLOUD_CONTEXT || '65536' }}
+          IMAGE_TAG: ${{ inputs.image_tag || vars.AGENT_IMAGE_TAG || 'v0.0.26' }}
           GH_TOKEN: ${{ secrets.AGENT_GH_TOKEN }}
           GIT_SSH_KEY_B64: ${{ secrets.AGENT_GIT_SSH_KEY_B64 }}
         run: |
@@ -143,6 +151,11 @@ jobs:
           for name in CLOUD_BASE_URL CLOUD_MODEL CLOUD_API_KEY CLOUD_CONTEXT; do
             put_env "$name" "${!name}"
           done
+          # The images are loaded on the host from the signed release; pull_policy: never keeps
+          # Docker from looking for these tags in a registry.
+          put_env GATEWAY_IMAGE "wckd-agent-stack/wckd-invincible-gateway:$IMAGE_TAG"
+          put_env AUTOBOT_IMAGE "wckd-agent-stack/wckd-autobot:$IMAGE_TAG"
+          put_env PANEL_IMAGE "wckd-agent-stack/wckd-agent-panel:$IMAGE_TAG"
           # Optional GitHub credentials: a fine-grained token (preferred) or an account SSH key.
           # They are only written when the corresponding secret exists; a redeploy keeps them.
           for name in GH_TOKEN GIT_SSH_KEY_B64; do

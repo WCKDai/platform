@@ -152,8 +152,10 @@ filename after "do not guess") was repeated on 0.0.26 and stopped at the questio
 Panel assets now carry a content hash, so a deploy is visible immediately through the CDN. The
 adapter registry and persistent resume across a long usage limit remain.
 
-**Deployed on 2026-10-28:** the alpha panel at
+**Deployed on 2026-10-29:** the alpha panel at
 [`agent.invincible.sh`](https://agent.invincible.sh) runs the gateway, Autobot and
 panel together in the PolyCore Coolify project. All three are healthy; login, CSRF, overview,
 an answer turn with a receipt, a tool turn that wrote a file, and logout were verified. The images
-are built on the host into a loopback registry until the GHCR packages are public (INV-82).
+are **public, signed release tarballs** (`agent-images-v0.0.26`) verified on the host and loaded
+locally; the compose uses `pull_policy: never`, so no registry (loopback or GHCR) is in the alpha
+path. GHCR packages remain optional for internal CI.

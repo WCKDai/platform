@@ -1,0 +1,92 @@
+name: Agent images
+
+# Builds the three agent-stack images and publishes them as public, signed release assets. The
+# alpha host downloads them without any registry credential, verifies SHA256SUMS against the
+# pinned key in RELEASE_KEY.pub, loads them with docker load, and Coolify runs the local images
+# with pull_policy: never. No loopback registry and no private GHCR access are involved.
+#
+# Run this before deploying the alpha:
+#   gh workflow run agent-images.yml -R WCKDai/platform -f version=v0.0.26
+#   ALPHA_HOST=root@... ./services/agent/scripts/load-alpha-images.sh
+#   gh workflow run deploy-agent-coolify.yml -R WCKDai/platform
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Invincible release tag to build into the images (v0.0.26)"
+        required: true
+        default: "v0.0.26"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: agent-images
+  cancel-in-progress: false
+
+jobs:
+  images:
+    name: Public signed images
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the signing key
+        env:
+          KEY: ${{ secrets.AGENT_IMAGES_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          [ -n "$KEY" ] || { echo "::error::AGENT_IMAGES_SIGNING_KEY is not set in the repository secrets"; exit 1; }
+
+      - name: Build and archive
+        env:
+          VERSION: ${{ inputs.version }}
+        working-directory: services/agent
+        run: |
+          set -euo pipefail
+          case "$VERSION" in v*) ;; *) echo "::error::version must be a release tag like v0.0.26"; exit 1;; esac
+          mkdir -p dist
+          docker build --build-arg "INVINCIBLE_VERSION=$VERSION" \
+            -t "wckd-agent-stack/wckd-invincible-gateway:$VERSION" images/gateway
+          docker build --build-arg "INVINCIBLE_VERSION=$VERSION" \
+            -t "wckd-agent-stack/wckd-autobot:$VERSION" images/autobot
+          docker build -t "wckd-agent-stack/wckd-agent-panel:$VERSION" panel
+          for image in wckd-invincible-gateway wckd-autobot wckd-agent-panel; do
+            docker save "wckd-agent-stack/$image:$VERSION" | gzip -9 > "dist/$image-$VERSION.tar.gz"
+          done
+          printf '%s\n' "$VERSION" > dist/VERSION
+          (cd dist && sha256sum ./*.tar.gz VERSION > SHA256SUMS && cat SHA256SUMS)
+          ls -lh dist
+
+      - name: Sign and verify
+        env:
+          KEY: ${{ secrets.AGENT_IMAGES_SIGNING_KEY }}
+        working-directory: services/agent/dist
+        run: |
+          set -euo pipefail
+          umask 077
+          printf '%s\n' "$KEY" > "$RUNNER_TEMP/agent-images-release"
+          ssh-keygen -Y sign -f "$RUNNER_TEMP/agent-images-release" -n agent-images-release SHA256SUMS
+          printf 'agent-images-release %s\n' "$(cat ../RELEASE_KEY.pub)" > allowed_signers
+          ssh-keygen -Y verify -f allowed_signers -I agent-images-release \
+            -n agent-images-release -s SHA256SUMS.sig < SHA256SUMS
+          rm -f "$RUNNER_TEMP/agent-images-release" allowed_signers
+          ls -lh SHA256SUMS SHA256SUMS.sig
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.version }}
+        working-directory: services/agent/dist
+        run: |
+          set -euo pipefail
+          tag="agent-images-$VERSION"
+          if gh release view "$tag" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "release $tag exists; replacing its assets"
+          else
+            gh release create "$tag" -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+              --title "Agent images $VERSION" \
+              --notes "Public, signed container images for the Invincible agent stack at $VERSION. Verify SHA256SUMS with services/agent/RELEASE_KEY.pub, then load the archives with docker load. The alpha does this in services/agent/scripts/load-alpha-images.sh; no registry credential is used."
+          fi
+          gh release upload "$tag" -R "$GITHUB_REPOSITORY" ./*.tar.gz SHA256SUMS SHA256SUMS.sig VERSION --clobber
