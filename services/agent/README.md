@@ -150,7 +150,8 @@ ALPHA_HOST=root@62.83.75.115 ./scripts/load-alpha-images.sh
 gh workflow run deploy-agent-coolify.yml -R WCKDai/platform
 ```
 
-`load-alpha-images.sh` pins the public key in `RELEASE_KEY.pub`, verifies `SHA256SUMS` against the
+`load-alpha-images.sh` pins the public key in `RELEASE_KEY.pub` (fingerprint
+`SHA256:pUnu93DCCD+JwjrBHZLb+syi8tFMR/SpScWVwHGJvrQ`), verifies `SHA256SUMS` against the
 release's signature, loads the three images as `wckd-agent-stack/*:v0.0.26`, and checks their
 tags. The compose uses `pull_policy: never`, and the deploy workflow sets Coolify's
 `docker_compose_custom_build_command` to a no-op `echo`, so Coolify skips its pre-deploy pull. No
