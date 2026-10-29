@@ -19,7 +19,7 @@ on:
         required: false
         default: ""
       image_tag:
-        description: "Agent image tag loaded on the host (blank: AGENT_IMAGE_TAG, or v0.0.26)"
+        description: "Agent image tag loaded on the host (blank: AGENT_IMAGE_TAG, or v0.0.27)"
         required: false
         default: ""
 
@@ -128,7 +128,7 @@ jobs:
           CLOUD_MODEL: ${{ vars.AGENT_CLOUD_MODEL || 'cheap' }}
           CLOUD_API_KEY: ${{ secrets.LITELLM_MASTER_KEY }}
           CLOUD_CONTEXT: ${{ vars.AGENT_CLOUD_CONTEXT || '65536' }}
-          IMAGE_TAG: ${{ inputs.image_tag || vars.AGENT_IMAGE_TAG || 'v0.0.26' }}
+          IMAGE_TAG: ${{ inputs.image_tag || vars.AGENT_IMAGE_TAG || 'v0.0.27' }}
           GH_TOKEN: ${{ secrets.AGENT_GH_TOKEN }}
           GIT_SSH_KEY_B64: ${{ secrets.AGENT_GIT_SSH_KEY_B64 }}
         run: |

@@ -165,6 +165,6 @@ remain.
 [`agent.invincible.sh`](https://agent.invincible.sh) runs the gateway, Autobot and
 panel together in the PolyCore Coolify project. All three are healthy; login, CSRF, overview,
 an answer turn with a receipt, a tool turn that wrote a file, and logout were verified. The images
-are **public, signed release tarballs** (`agent-images-v0.0.26`) verified on the host and loaded
+are **public, signed release tarballs** (`agent-images-v0.0.27`) verified on the host and loaded
 locally; the compose uses `pull_policy: never`, so no registry (loopback or GHCR) is in the alpha
 path. GHCR packages remain optional for internal CI.

@@ -6,16 +6,16 @@ name: Agent images
 # with pull_policy: never. No loopback registry and no private GHCR access are involved.
 #
 # Run this before deploying the alpha:
-#   gh workflow run agent-images.yml -R WCKDai/platform -f version=v0.0.26
+#   gh workflow run agent-images.yml -R WCKDai/platform -f version=v0.0.27
 #   ALPHA_HOST=root@... ./services/agent/scripts/load-alpha-images.sh
 #   gh workflow run deploy-agent-coolify.yml -R WCKDai/platform
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Invincible release tag to build into the images (v0.0.26)"
+        description: "Invincible release tag to build into the images (v0.0.27)"
         required: true
-        default: "v0.0.26"
+        default: "v0.0.27"
 
 permissions:
   contents: write
@@ -45,7 +45,7 @@ jobs:
         working-directory: services/agent
         run: |
           set -euo pipefail
-          case "$VERSION" in v*) ;; *) echo "::error::version must be a release tag like v0.0.26"; exit 1;; esac
+          case "$VERSION" in v*) ;; *) echo "::error::version must be a release tag like v0.0.27"; exit 1;; esac
           mkdir -p dist
           scripts/fetch-linux-binaries.sh "$VERSION" x86_64
           docker build --build-arg "INVINCIBLE_VERSION=$VERSION" \
