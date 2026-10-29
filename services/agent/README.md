@@ -37,7 +37,7 @@ cp .env.example .env
 panel/scripts/hash-password.mjs 'a long operator password'
 # put the printed scrypt:... in PANEL_PASSWORD_HASH
 
-scripts/fetch-linux-binaries.sh v0.0.29 x86_64
+scripts/fetch-linux-binaries.sh v0.0.30 x86_64
 docker compose config
 docker compose up -d --build
 docker compose ps
@@ -145,14 +145,14 @@ release assets** (the container tarballs, `SHA256SUMS` and its Ed25519 signature
 verifies and loads them; it never contacts a registry:
 
 ```sh
-gh workflow run agent-images.yml -R WCKDai/platform -f version=v0.0.29
+gh workflow run agent-images.yml -R WCKDai/platform -f version=v0.0.30
 ALPHA_HOST=root@62.83.75.115 ./scripts/load-alpha-images.sh
 gh workflow run deploy-agent-coolify.yml -R WCKDai/platform
 ```
 
 `load-alpha-images.sh` pins the public key in `RELEASE_KEY.pub` (fingerprint
 `SHA256:pUnu93DCCD+JwjrBHZLb+syi8tFMR/SpScWVwHGJvrQ`), verifies `SHA256SUMS` against the
-release's signature, loads the three images as `wckd-agent-stack/*:v0.0.29`, and checks their
+release's signature, loads the three images as `wckd-agent-stack/*:v0.0.30`, and checks their
 tags. To rotate the key, replace `RELEASE_KEY.pub`, set the `AGENT_IMAGES_SIGNING_KEY` secret to
 the new private key, pin the new public key in `load-alpha-images.sh`, and publish a new
 `agent-images-*` release. The compose uses `pull_policy: never`, and the deploy workflow sets Coolify's
@@ -189,12 +189,12 @@ that dedicated-host path, not the Coolify alpha.
   design: the gateway runs in its own container and the models come from LiteLLM.
 - A first task from the panel, then `docker compose logs -f agent panel caddy`.
 
-The 0.0.29 alpha stack is deployed through Coolify at
+The 0.0.30 alpha stack is deployed through Coolify at
 `https://agent.invincible.sh` and was verified on 2026-10-29. The images are the public signed
-release tarballs from `agent-images-v0.0.29`; `pull_policy: never` keeps Coolify and Docker off
+release tarballs from `agent-images-v0.0.30`; `pull_policy: never` keeps Coolify and Docker off
 every registry.
 
-- all three containers healthy (`gateway`, `agent`, `panel`); both binaries report `0.0.29`;
+- all three containers healthy (`gateway`, `agent`, `panel`); both binaries report `0.0.30`;
 - Let's Encrypt on the origin and a Cloudflare edge certificate on the public name;
 - login 303, dashboard and `/api/overview` 200, a missing CSRF token 403, logout 200;
 - the panel's rooms load: Overview, Chat, Workspaces, Delegations, Agents, Project, Providers,
@@ -202,6 +202,9 @@ every registry.
 - an answer turn returned `alpha` with a gateway receipt; a tool turn wrote a file in `/workspace`;
 - a project-brief codeword was answered from the system prompt, a `todo` plan was shown beside the
   conversation, and both were removed after the check;
+- a cloud provider was added from **Providers** (the fake `alpha-test` endpoint), appeared in the
+  model list without a restart, then was removed; the gateway config kept only `cheap` and the
+  key file was gone;
 - a thread was created from the project in `/workspace`, a tool task wrote inside its worktree,
   the panel streamed the live turn with diffs and tool outputs, and **PR** committed, pushed and
   opened a real GitHub pull request through the PAT alone (Workflows write); the panel returned
