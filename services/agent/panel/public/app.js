@@ -1,10 +1,11 @@
 const $ = (id) => document.getElementById(id);
-const VIEWS = ["overview", "chat", "workspaces", "bots", "providers", "secrets", "variables", "subscriptions", "integrations", "usage", "settings"];
+const VIEWS = ["overview", "chat", "workspaces", "delegations", "bots", "providers", "secrets", "variables", "subscriptions", "integrations", "usage", "settings"];
 const CHANNELS = ["telegram", "discord", "slack", "email", "signal", "matrix", "whatsapp"];
 const PAGE_META = {
   overview: ["Overview", "The node, the agent, and what needs you."],
   chat: ["Chat", "A conversation with Autobot. Tools, receipts and approvals stay in the transcript."],
   workspaces: ["Workspaces", "Parallel worktrees, diffs and pull requests."],
+  delegations: ["Delegations", "Tasks that outlive a usage limit, and where they stand."],
   bots: ["Agents", "Bots, their models, approvals and channels."],
   providers: ["Providers", "Gateway models and the agent CLIs installed on this machine."],
   secrets: ["Secrets", "Write-only credentials for connectors and hooks."],
@@ -25,7 +26,9 @@ let settings = {};
 let overview = {};
 let variables = [];
 let subscriptions = [];
+let delegationData = {};
 let providerList = [];
+let adapters = [];
 let secretList = [];
 let paletteIndex = 0;
 let currentView = "overview";
@@ -371,7 +374,9 @@ function handleStreamEvent(event) {
   }
   if (event.type === "delegate.paused") {
     live = null;
-    appendBubble("note", `delegated: paused until ${event.retry_at_local || "the limit clears"}`);
+    const job = event.job_id ? ` · job ${String(event.job_id).slice(0, 10)}` : "";
+    const when = event.auto_resume ? "it resumes automatically" : "resume it from Delegations";
+    appendBubble("note", `delegated: paused until ${event.retry_at_local || "the limit clears"} · ${when}${job}`);
     return;
   }
   if (event.type === "delegate.finished") {
@@ -486,6 +491,7 @@ function renderThreads(section) {
         })
         .join("")
     : `<tr><td colspan="5" class="muted">No threads yet. Start one above; it gets its own worktree and branch.</td></tr>`;
+  fillAdapterThreads();
 }
 
 async function newThread(event) {
@@ -1004,6 +1010,48 @@ function renderSubscriptionOverview(section) {
   ].join("");
 }
 
+function renderDelegations(section) {
+  const data = value(section) || {};
+  delegationData = data;
+  const jobs = data.delegations || [];
+  $("delegation-summary").innerHTML = [
+    ["paused", data.paused ?? 0],
+    ["running", data.running ?? 0],
+    ["kept", jobs.length],
+    ["auto resume", `up to ${data.max_resumes ?? 5}`],
+  ]
+    .map(([label, valueText]) => `<div><span>${esc(label)}</span><strong>${esc(valueText)}</strong></div>`)
+    .join("");
+  $("delegations").innerHTML = jobs.length
+    ? jobs
+        .map((job) => {
+          const tone = job.state === "paused" ? "quiet" : job.state === "running" ? "" : job.state === "done" ? "" : "bad";
+          const retry = job.state === "paused" ? when(job.retry_at) : "—";
+          const result = job.last_error || job.final_text || "—";
+          const actions =
+            job.state === "paused"
+              ? `<div class="thread-actions"><button class="mini" type="button" data-delegation-resume="${esc(job.id)}">Resume now</button><button class="mini no" type="button" data-delegation-cancel="${esc(job.id)}">Cancel</button></div>`
+              : `<button class="mini" type="button" data-session="${esc(job.session)}">Open</button>`;
+          return `<tr><td><strong>${esc(job.task || job.session)}</strong><div class="muted mono">${esc(job.bot)} · ${esc(job.session)}</div></td><td><span class="badge ${tone}">${esc(job.state)}</span>${job.owner_controls ? `<div class="muted">owner controls</div>` : ""}</td><td class="mono">${esc(job.resumes)} / ${esc(job.max_resumes)}</td><td class="muted">${esc(retry)}</td><td class="muted">${esc(String(result).slice(0, 240))}</td><td>${actions}</td></tr>`;
+        })
+        .join("")
+    : `<tr><td colspan="6" class="muted">No delegated runs have paused. Start one from Chat with delegated mode on.</td></tr>`;
+}
+
+async function delegationAction(id, action) {
+  if (action === "cancel" && !confirm(`Cancel paused delegation ${id}? Its conversation and worktree stay.`)) return;
+  try {
+    await write(`/api/delegations/${encodeURIComponent(id)}/${action}`, { method: "POST" });
+    $("delegation-output").textContent =
+      action === "resume" ? `resuming ${id} now` : `cancelled ${id}`;
+    toast(action === "resume" ? "Delegation resuming" : "Delegation cancelled", "good");
+    await refresh();
+  } catch (error) {
+    $("delegation-output").textContent = String(error.message || error);
+    toast(String(error.message || error), "bad");
+  }
+}
+
 function renderSubscriptions(section) {
   const data = value(section) || {};
   subscriptions = data.subscriptions || [];
@@ -1134,10 +1182,10 @@ async function removeSecret(name) {
 
 async function loadProviders() {
   try {
-    const response = await api("/api/providers");
-    if (!response.ok) throw new Error(`providers ${response.status}`);
+    const response = await api("/api/adapters");
+    if (!response.ok) throw new Error(`adapters ${response.status}`);
     const data = await response.json();
-    renderAgentProviders(value(data.providers)?.providers || []);
+    renderAgentProviders(data.adapters || []);
   } catch (error) {
     $("agent-providers").innerHTML = `<tr><td colspan="5" class="muted">${esc(error.message || error)}</td></tr>`;
   }
@@ -1145,14 +1193,138 @@ async function loadProviders() {
 
 function renderAgentProviders(providers) {
   providerList = providers || [];
+  adapters = providerList;
   $("agent-providers").innerHTML = providerList.length
     ? providerList
-        .map(
-          (provider) =>
-            `<tr><td><strong>${esc(provider.name)}</strong><div class="muted mono">${esc(provider.path || provider.command)}</div></td><td class="mono">${esc(provider.version || "—")}</td><td>${esc(provider.auth)}${provider.login ? `<div class="muted">${esc(provider.login)}</div>` : ""}</td><td>${(provider.capabilities || []).map((capability) => `<span class="badge quiet">${esc(capability)}</span>`).join(" ")}</td><td>${provider.installed ? `<span class="bot-status running">installed</span>` : `<span class="bot-status">not found</span>`}</td></tr>`,
-        )
+        .map((provider) => {
+          const status = !provider.installed
+            ? `<span class="bot-status">not found</span>`
+            : provider.runnable === false
+              ? `<span class="bot-status">native</span>`
+              : `<span class="bot-status running">installed</span>`;
+          return `<tr><td><strong>${esc(provider.label || provider.name)}</strong><div class="muted mono">${esc(provider.path || provider.command)}</div></td><td class="mono">${esc(provider.version || "—")}</td><td>${esc(provider.auth)}${provider.login ? `<div class="muted">${esc(provider.login)}</div>` : ""}</td><td>${(provider.capabilities || []).map((capability) => `<span class="badge quiet">${esc(capability)}</span>`).join(" ")}</td><td>${status}</td></tr>`;
+        })
         .join("")
     : `<tr><td colspan="5" class="muted">No providers reported.</td></tr>`;
+  fillAdapterSelects();
+}
+
+function fillAdapterThreads() {
+  const select = $("adapter-thread");
+  if (!select) return;
+  const keep = select.value;
+  select.innerHTML = threads.length
+    ? threads
+        .map((thread) => `<option value="${esc(thread.id)}">${esc(thread.name || thread.id)} · ${esc(thread.branch)}</option>`)
+        .join("")
+    : `<option value="">Start a thread in Workspaces first</option>`;
+  if ([...select.options].some((option) => option.value === keep)) select.value = keep;
+}
+
+function fillAdapterSelects() {
+  const select = $("adapter-name");
+  if (!select) return;
+  const usable = adapters.filter((adapter) => adapter.installed && adapter.runnable);
+  const keep = select.value;
+  select.innerHTML = usable.length
+    ? usable.map((adapter) => `<option value="${esc(adapter.name)}">${esc(adapter.label || adapter.name)}</option>`).join("")
+    : `<option value="">No external adapter installed</option>`;
+  if ([...select.options].some((option) => option.value === keep)) select.value = keep;
+  const button = $("adapter-run");
+  if (button) button.disabled = !usable.length || !$("adapter-thread")?.value;
+  if (!usable.length) $("adapter-status").textContent = "No external adapter is installed on this node.";
+}
+
+async function runAdapter() {
+  const name = $("adapter-name").value;
+  const thread = $("adapter-thread").value;
+  const task = $("adapter-task").value.trim();
+  if (!name || !thread || !task) {
+    toast("Choose a thread, an adapter and a task", "bad");
+    return;
+  }
+  const button = $("adapter-run");
+  const output = $("adapter-output");
+  const status = $("adapter-status");
+  button.disabled = true;
+  status.textContent = `Checking ${name}…`;
+  output.textContent = "";
+  const append = (text) => {
+    output.textContent += text;
+    if (output.textContent.length > 200_000) output.textContent = output.textContent.slice(-160_000);
+    output.scrollTop = output.scrollHeight;
+  };
+  try {
+    const response = await api(`/api/adapters/${encodeURIComponent(name)}/run`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ thread, task, stream: true }),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error?.message || data.error || `HTTP ${response.status}`);
+    }
+    if ((response.headers.get("content-type") || "").includes("application/json")) {
+      const data = await response.json();
+      append(`exit ${data.exit_code} · ${data.seconds}s${data.truncated ? " · output truncated" : ""}\n\n${data.stdout || "(no stdout)"}${data.stderr ? `\n\n— stderr —\n${data.stderr}` : ""}`);
+      status.textContent = `Finished in ${data.seconds}s; the thread has the changes.`;
+      return;
+    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let exit = null;
+    let seconds = 0;
+    let truncated = false;
+    let failure = "";
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let cut = buffer.indexOf("\n\n");
+      while (cut !== -1) {
+        const line = buffer.slice(0, cut);
+        buffer = buffer.slice(cut + 2);
+        if (line.startsWith("data: ")) {
+          let event;
+          try {
+            event = JSON.parse(line.slice(6));
+          } catch {
+            event = null;
+          }
+          if (event?.type === "adapter.started") status.textContent = `${event.label || name} is running in ${event.workdir || "its worktree"}…`;
+          else if (event?.type === "adapter.output") {
+            const delta =
+              event.stream === "stderr"
+                ? event.delta
+                    .split("\n")
+                    .map((line) => (line.trim() ? `[stderr] ${line}` : line))
+                    .join("\n")
+                : event.delta;
+            append(delta);
+          }
+          else if (event?.type === "adapter.finished") {
+            exit = event.exit_code;
+            seconds = event.seconds || 0;
+            truncated = Boolean(event.truncated);
+          } else if (event?.type === "adapter.error") failure = event.text || "the adapter failed";
+        }
+        cut = buffer.indexOf("\n\n");
+      }
+    }
+    if (failure) throw new Error(failure);
+    const tail = `\n— exit ${exit ?? "?"} · ${seconds}s${truncated ? " · output truncated" : ""} —\n`;
+    append(tail);
+    status.textContent = exit === 0 ? `Finished in ${seconds}s; the thread has the changes.` : "The adapter stopped with a non-zero exit code.";
+    toast(`${name} finished (exit ${exit})`, exit === 0 ? "good" : "bad");
+    await refresh();
+  } catch (error) {
+    append(`\n${String(error.message || error)}`);
+    status.textContent = "The adapter stopped with an error.";
+    toast(String(error.message || error), "bad");
+  } finally {
+    button.disabled = false;
+  }
 }
 
 function renderPalette(filter = "") {
@@ -1209,6 +1381,7 @@ async function refresh() {
     renderBots(data.bots);
     renderConnectors(data.bots);
     renderVariables(data.variables);
+    renderDelegations(data.delegations);
     renderSubscriptions(data.subscriptions);
     renderSecrets(data.secrets);
     renderUsage(data.agent, data.audit);
@@ -1247,6 +1420,7 @@ function bind() {
   $("model-save").addEventListener("click", setModel);
   $("approvals-save").addEventListener("click", setApprovals);
   $("check-save").addEventListener("click", saveCheck);
+  $("adapter-run").addEventListener("click", runAdapter);
   $("refresh").addEventListener("click", refresh);
   $("palette").addEventListener("click", openPalette);
   $("copy-provider-command").addEventListener("click", async () => {
@@ -1314,6 +1488,8 @@ function bind() {
     else if (button.dataset.connector) toggleConnector(button.dataset.connector, button.dataset.bot, button.dataset.on === "1");
     else if (button.dataset.toolGroup) toggleToolGroup(button.dataset.toolGroup, button.dataset.on);
     else if (button.dataset.variable) removeVariable(button.dataset.variable);
+    else if (button.dataset.delegationResume) delegationAction(button.dataset.delegationResume, "resume");
+    else if (button.dataset.delegationCancel) delegationAction(button.dataset.delegationCancel, "cancel");
     else if (button.dataset.subscriptionEdit) editSubscription(button.dataset.subscriptionEdit);
     else if (button.dataset.subscriptionDelete) removeSubscription(button.dataset.subscriptionDelete);
     else if (button.dataset.secretDelete) removeSecret(button.dataset.secretDelete);

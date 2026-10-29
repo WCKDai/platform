@@ -9,7 +9,7 @@ import path from "node:path";
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(DIR, "public");
-const VERSION = "0.1.2";
+const VERSION = "0.1.3";
 const PORT = Number(process.env.PORT || 7800);
 const BIND = process.env.PANEL_BIND || "0.0.0.0";
 const GATEWAY = (process.env.GATEWAY_HTTP_URL || process.env.GATEWAY_URL || "http://127.0.0.1:7777")
@@ -281,7 +281,7 @@ const server = http.createServer(async (request, response) => {
     }
 
     if (url.pathname === "/api/overview") {
-      const [models, node, info, stats, conversations, approvals, usage, insights, audit, threads, bots, settings, variables, subscriptions, secrets] =
+      const [models, node, info, stats, conversations, approvals, usage, insights, audit, threads, bots, settings, variables, subscriptions, secrets, delegations] =
         await Promise.all([
           safely(GATEWAY, "/v1/models"),
           safely(GATEWAY, "/v1/node"),
@@ -298,6 +298,7 @@ const server = http.createServer(async (request, response) => {
           safely(AGENT, "/v1/agent/variables"),
           safely(AGENT, "/v1/agent/subscriptions"),
           safely(AGENT, "/v1/agent/secrets"),
+          safely(AGENT, "/v1/agent/delegations"),
         ]);
       return json(response, 200, {
         gateway: { models, node },
@@ -309,6 +310,7 @@ const server = http.createServer(async (request, response) => {
         variables,
         subscriptions,
         secrets,
+        delegations,
       });
     }
 
@@ -465,6 +467,39 @@ const server = http.createServer(async (request, response) => {
     if (subscriptionPath && request.method === "DELETE") {
       const id = decodeURIComponent(subscriptionPath[1]);
       const result = await upstream(AGENT, `/v1/agent/subscriptions/${encodeURIComponent(id)}`, { method: "DELETE" });
+      return json(response, result.status, result.value);
+    }
+
+    if (url.pathname === "/api/adapters" && request.method === "GET") {
+      const result = await safely(AGENT, "/v1/agent/adapters");
+      return json(response, result.status || 502, result.value);
+    }
+    const adapterRun = url.pathname.match(/^\/api\/adapters\/([^/]+)\/run$/);
+    if (adapterRun && request.method === "POST") {
+      const name = decodeURIComponent(adapterRun[1]);
+      const payload = JSON.parse(await body(request, 64 * 1024));
+      const task = String(payload.task || "").trim();
+      const thread = String(payload.thread || "").trim();
+      if (!task) return json(response, 400, { error: "the task is empty" });
+      if (!thread) return json(response, 400, { error: "choose a thread" });
+      const result = await upstream(AGENT, `/v1/agent/adapters/${encodeURIComponent(name)}/run`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ task, thread, timeout_seconds: Number(payload.timeout_seconds) || undefined }),
+        timeout: 60 * 60_000,
+      });
+      return json(response, result.status, result.value);
+    }
+
+    const delegationAction = url.pathname.match(/^\/api\/delegations\/([^/]+)\/(resume|cancel)$/);
+    if (delegationAction && request.method === "POST") {
+      const id = decodeURIComponent(delegationAction[1]);
+      const action = delegationAction[2];
+      const result = await upstream(AGENT, `/v1/agent/delegations/${encodeURIComponent(id)}/${action}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
       return json(response, result.status, result.value);
     }
 

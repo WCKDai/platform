@@ -159,7 +159,24 @@ removed without ever returning a value; providers shows the gateway models and e
 coding CLI detected on the machine. The agent gained a **verification gate**: `[agent] check`
 runs after a turn changed files, feeds a failure back once, and stops with the failure visible
 instead of claiming success. The adapter registry and persistent resume across a long usage limit
-remain.
+remained for the next release.
+
+**Shipped in 0.0.28:** the adapter registry runs, not just detects. Codex, Claude Code, OpenCode,
+Cursor Agent, Hermes and Pi each get a capability row, a login check where the CLI has one, and
+one run protocol in a thread's worktree: the task is one argument, the environment is rebuilt from
+a short allowlist (never this node's gateway, provider, GitHub or Autobot tokens), one run per
+worktree is allowed, and output streams as `adapter.started`, line-by-line `adapter.output` and
+`adapter.finished`/`adapter.error`. The answer is the CLI's own stdout/stderr; Invincible cannot
+receipt a model call it did not make, and the panel says so. Codex, Claude Code and OpenCode were
+run through the same endpoint on the Mac, and Codex through the panel.
+
+Delegated runs now outlive a long usage limit. A pause writes a job to
+`$AUTOBOT_HOME/delegations.json` with the conversation, scope and retry time; `autobot serve`
+resumes due jobs in the same conversation and worktree, without a client, up to five times. A
+restart turns `running` jobs back into `paused` jobs and tries them again. The panel's
+**Delegations** view lists the queue with task, state, resumes and retry time, and can resume or
+cancel a paused run; a newer request in the same conversation replaces an older paused one. The
+`delegate.paused` event carries `job_id`, `auto_resume` and `resumes`.
 
 **Deployed on 2026-10-29:** the alpha panel at
 [`agent.invincible.sh`](https://agent.invincible.sh) runs the gateway, Autobot and

@@ -21,6 +21,7 @@
           <button type="button" data-view="overview">Overview</button>
           <button type="button" data-view="chat">Chat</button>
           <button type="button" data-view="workspaces">Workspaces</button>
+          <button type="button" data-view="delegations">Delegations</button>
         </div>
         <div class="nav-group">
           <p class="nav-label">Configure</p>
@@ -161,6 +162,27 @@
           </div>
         </section>
 
+        <section class="view" data-view="delegations" hidden>
+          <div class="grid">
+            <article class="card wide">
+              <div class="card-head"><h2>Delegated runs</h2><span class="badge quiet">survive restarts</span></div>
+              <p class="small">A delegated task that hits a long provider usage limit is kept here instead of lost. Autobot resumes it in the same conversation and worktree when the window reopens, up to five automatic resumes. A run that waits on you is reported, not guessed past.</p>
+              <div id="delegation-summary" class="stats wide-stats"></div>
+            </article>
+
+            <article class="card wide">
+              <div class="card-head"><h2>Queue and history</h2><span class="badge quiet">10s resume check</span></div>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Run</th><th>State</th><th>Resumes</th><th>Retry</th><th>Result or error</th><th></th></tr></thead>
+                  <tbody id="delegations"><tr><td colspan="6" class="muted">No delegations.</td></tr></tbody>
+                </table>
+              </div>
+              <pre id="delegation-output" class="output"></pre>
+            </article>
+          </div>
+        </section>
+
         <section class="view" data-view="bots" hidden>
           <div class="grid">
             <article class="card wide">
@@ -226,6 +248,21 @@
                 <button id="copy-provider-command" class="ghost mini" type="button">Copy command</button>
                 <span class="small muted">A provider key is never sent to this browser again.</span>
               </div>
+            </article>
+
+            <article class="card wide">
+              <div class="card-head"><h2>Run an adapter</h2><span class="badge quiet">in a thread worktree</span></div>
+              <p class="small">An external CLI uses its own account. It runs in the selected thread's worktree, so review the diff before opening a PR. Invincible does not receipt its model calls.</p>
+              <div class="row">
+                <div class="field"><label for="adapter-thread">Thread</label><select id="adapter-thread"></select></div>
+                <div class="field"><label for="adapter-name">Adapter</label><select id="adapter-name"></select></div>
+              </div>
+              <div class="field"><label for="adapter-task">Task</label><textarea id="adapter-task" rows="3" maxlength="8000" placeholder="Fix the failing test in checkout.py and run it once."></textarea></div>
+              <div class="row">
+                <button id="adapter-run" class="primary" type="button">Run adapter</button>
+                <span id="adapter-status" class="small muted">A run can take minutes; the worktree keeps the changes.</span>
+              </div>
+              <pre id="adapter-output" class="output tall"></pre>
             </article>
           </div>
         </section>
