@@ -1,6 +1,7 @@
 // Proxy for the gateway's /v1/rent/* routes. The browser never sees a provider key.
-// Creating a session without confirm is forwarded as confirm:false. The gateway answers
-// 409 with the estimate; this process does not add confirmation on its own.
+// The node strips body `confirm` and `X-Wckd-Confirm`. A create is real only when this
+// proxy adds `invincible-confirmed: 1`. Without that header the node returns 409 and
+// provisions nothing. This process never adds the header unless the operator confirmed.
 
 const RENT_OFF = "GPU rental not connected on this node";
 const EU = new Set(["EU", "EU-secure"]);
@@ -48,6 +49,17 @@ function publicRent(value) {
   return copy;
 }
 
+function readJson(text) {
+  const raw = text && String(text).trim() ? String(text) : "{}";
+  try {
+    const value = JSON.parse(raw);
+    if (!value || typeof value !== "object" || Array.isArray(value)) return { error: "the body must be a JSON object" };
+    return { value };
+  } catch {
+    return { error: "the body is not JSON" };
+  }
+}
+
 export function createRent({ upstream, safely, scrub, json, readBody }) {
   return async function rent(url, request, response) {
     if (!url.pathname.startsWith("/api/rent")) return false;
@@ -86,7 +98,9 @@ export function createRent({ upstream, safely, scrub, json, readBody }) {
     }
 
     if (url.pathname === "/api/rent/sessions" && request.method === "POST") {
-      const payload = JSON.parse(await readBody(request, 64 * 1024));
+      const parsed = readJson(await readBody(request, 64 * 1024));
+      if (parsed.error) return json(response, 400, { error: parsed.error });
+      const payload = parsed.value;
       const preset = String(payload.preset_id || "").trim();
       const hours = hoursOf(payload.hours);
       const regions = regionsOf(payload.require_regions);
@@ -98,7 +112,6 @@ export function createRent({ upstream, safely, scrub, json, readBody }) {
       if (!/^[A-Za-z0-9_-]{1,80}$/.test(project)) return json(response, 400, { error: "project_id is not valid" });
       const confirm = payload.confirm === true;
       const offer = payload.offer_id ? String(payload.offer_id).slice(0, 200) : "";
-      if (confirm && !offer) return json(response, 400, { error: "confirming a rental needs the offer id from the estimate" });
       const body = {
         project_id: project,
         preset_id: preset,
@@ -108,7 +121,8 @@ export function createRent({ upstream, safely, scrub, json, readBody }) {
       };
       if (offer) body.offer_id = offer;
       const headers = { "Content-Type": "application/json" };
-      if (confirm) headers["X-Wckd-Confirm"] = "true";
+      // The node ignores body confirm. Only this header authorises a create.
+      if (confirm) headers["invincible-confirmed"] = "1";
       let result;
       try {
         result = await upstream("/v1/rent/sessions", {
@@ -138,8 +152,9 @@ export function createRent({ upstream, safely, scrub, json, readBody }) {
     if (stop && request.method === "POST") {
       const id = decodeURIComponent(stop[1]);
       if (!/^[A-Za-z0-9_-]{1,120}$/.test(id)) return json(response, 400, { error: "not a session id" });
-      const payload = JSON.parse(await readBody(request, 4096) || "{}");
-      const force = payload.force === true;
+      const parsed = readJson(await readBody(request, 4096));
+      if (parsed.error) return json(response, 400, { error: parsed.error });
+      const force = parsed.value.force === true;
       let result;
       try {
         result = await upstream(`/v1/rent/sessions/${encodeURIComponent(id)}/stop`, {

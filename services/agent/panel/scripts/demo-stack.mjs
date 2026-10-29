@@ -80,9 +80,9 @@ const gateway = await listen(async (req, res) => {
     const chunks = [];
     for await (const chunk of req) chunks.push(chunk);
     const payload = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-    if (payload.confirm !== true) {
+    if (req.headers["invincible-confirmed"] !== "1") {
       return json(res, 409, {
-        error: { code: "confirmation_required", message: "confirmation required; resend with confirm true. Nothing was created." },
+        error: { code: "confirmation_required", message: "renting a GPU needs confirmation; send again with invincible-confirmed: 1. Nothing was created." },
         offer: { id: payload.offer_id, usd_per_hr: 0.34, estimate_usd: 0.34 * payload.hours },
         hours: payload.hours,
         cost_estimate_usd: 0.34 * payload.hours,

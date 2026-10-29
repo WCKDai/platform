@@ -2294,6 +2294,20 @@ async function loadGpu() {
 
 let rentOffers = [];
 
+function rentProblem(data, status) {
+  const error = data?.error;
+  const code = error && typeof error === "object" ? error.code : "";
+  const message = (error && typeof error === "object" ? error.message : error) || data?.message || "";
+  if (status === 403 && code === "rent_cap") {
+    const limit = error.limit ? ` (${error.limit})` : "";
+    return `Over the rental cap${limit}. ${message || "Nothing was started, and a session over the cap is stopped."}`;
+  }
+  if (status === 400 && (code === "bad_request" || /region/i.test(String(message)))) {
+    return message || "That region is outside what this node allows. Nothing was rented.";
+  }
+  return "";
+}
+
 async function loadOffers() {
   const preset = $("gpu-preset").value;
   const hours = $("gpu-hours").value;
@@ -2305,6 +2319,12 @@ async function loadOffers() {
     if (data.connected === false) {
       showGpuOff(data.message);
       $("gpu-output").textContent = "";
+      return;
+    }
+    const problem = rentProblem(data, response.status);
+    if (problem) {
+      $("gpu-output").textContent = problem;
+      toast(problem, "bad");
       return;
     }
     if (!response.ok) throw new Error(data.error?.message || data.error || `HTTP ${response.status}`);
@@ -2343,6 +2363,12 @@ async function quoteRent(offerId) {
       showGpuOff(data.message);
       return;
     }
+    const problem = rentProblem(data, response.status);
+    if (problem) {
+      $("gpu-output").textContent = problem;
+      toast(problem, "bad");
+      return;
+    }
     if (response.status !== 409) throw new Error(data.error?.message || data.error || `HTTP ${response.status}`);
     rentOffer = payload;
     const offer = data.offer || rentOffers.find((item) => item.id === offerId) || {};
@@ -2377,6 +2403,13 @@ async function confirmRent() {
       body: JSON.stringify({ ...rentOffer, confirm: true }),
     });
     const data = await response.json();
+    const problem = rentProblem(data, response.status);
+    if (problem) {
+      $("rent-summary").textContent = problem;
+      $("gpu-output").textContent = problem;
+      toast(problem, "bad");
+      return;
+    }
     if (!response.ok) throw new Error(data.error?.message || data.error || `HTTP ${response.status}`);
     $("rent-dialog").hide();
     toast("Rental started", "good");
@@ -2456,6 +2489,12 @@ async function stopRent(id, force) {
       body: JSON.stringify({ force }),
     });
     const data = await response.json();
+    const problem = rentProblem(data, response.status);
+    if (problem) {
+      $("gpu-output").textContent = problem;
+      toast(problem, "bad");
+      return;
+    }
     if (response.status === 409 && data.error?.code === "drain_failed") {
       const again = await askConfirm("Drain did not finish. Force stop deletes the pod anyway and can lose unsynced files.", "Force stop");
       if (again) return stopRent(id, true);

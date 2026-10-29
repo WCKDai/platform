@@ -224,7 +224,8 @@ message. Mission puts the project brief, the todo plan, the team board, worktree
 runs on one page. Botmode shows each bot's status, channels and current work, and can open a chat
 with that bot. Studio queues image and speech jobs on the gateway (`[[images]]`, `[[speech]]`) and
 video jobs on a rented ComfyUI session. GPU rental proxies `/v1/rent/*`: EU or EU-secure only, a
-confirm step that shows the offer, hourly price, hours and estimated total before `confirm: true`,
+confirm step that shows the offer, hourly price, hours and estimated total before
+`invincible-confirmed: 1` (the node ignores a body `confirm`),
 and a live session card with countdown, cost so far and Stop. When the gateway has no rent route
 the room says the rental is not connected. The browser still never sees a provider key or a pod
 URL. Controls are Web Awesome 3.14.0 (MIT), vendored under `services/agent/panel/public/vendor/`

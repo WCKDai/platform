@@ -42,7 +42,8 @@ background, hairline rules, and WCKD purple (`#7C5CFF`, readable lilac `#9373FF`
 - **GPU:** proxies the gateway's `/v1/rent/*` (offers, create, list, get, stop, health). Regions
   are EU or EU-secure only. Create is sent with `confirm: false` first. The gateway's 409 estimate
   is shown (offer, $/hr, hours, estimated total) and nothing is rented until **Rent this offer**
-  sends `confirm: true` and `X-Wckd-Confirm: true`. A live session shows the countdown, cost so
+  sends `invincible-confirmed: 1`. Body `confirm` is ignored by the node. A 403 `rent_cap`
+  or a 400 region refusal is shown as that refusal. A live session shows the countdown, cost so
   far and Stop. If the gateway has no rent route, the room says "GPU rental not connected on this
   node".
 - **Agents:** the add-agent form lives on Botmode.

@@ -34,7 +34,7 @@ const salt = randomBytes(16);
 const hash = scryptSync("correct horse battery", salt, 32);
 const passwordHash = `scrypt:${salt.toString("hex")}:${hash.toString("hex")}`;
 
-const seen = { confirm: null, header: null };
+const seen = { confirm: null, header: "", wckd: "" };
 
 const gateway = await listen(async (req, res) => {
   const url = new URL(req.url, "http://gateway");
@@ -61,11 +61,19 @@ const gateway = await listen(async (req, res) => {
   }
   if (url.pathname === "/v1/rent/sessions" && req.method === "POST") {
     const payload = JSON.parse((await readBody(req)).toString("utf8"));
+    const confirmed = req.headers["invincible-confirmed"] === "1";
     seen.confirm = payload.confirm;
-    seen.header = req.headers["x-wckd-confirm"] || "";
-    if (payload.confirm !== true) {
+    seen.header = req.headers["invincible-confirmed"] || "";
+    seen.wckd = req.headers["x-wckd-confirm"] || "";
+    if (payload.preset_id === "over-cap") {
+      return json(res, 403, {
+        error: { code: "rent_cap", message: "above max_usd_per_hour", limit: "max_usd_per_hour" },
+      });
+    }
+    // Body confirm is not approval. Only the header starts a rental.
+    if (!confirmed) {
       return json(res, 409, {
-        error: { code: "confirmation_required", message: "confirmation required" },
+        error: { code: "confirmation_required", message: "renting a GPU needs confirmation; send again with invincible-confirmed: 1" },
         offer: { id: payload.offer_id, usd_per_hr: 0.34, estimate_usd: 0.34 },
         hours: payload.hours,
         cost_estimate_usd: 0.34,
@@ -190,16 +198,25 @@ test("csrf, rental confirm and secret scrubbing", async () => {
   assert.equal(quote.status, 409);
   assert.equal(seen.confirm, false);
   assert.equal(seen.header, "");
+  assert.equal(seen.wckd, "");
+  const direct = await fetch(`http://127.0.0.1:${gateway.address().port}/v1/rent/sessions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ preset_id: "comfyui-minimax-h3", hours: 1, confirm: true, require_regions: ["EU"] }),
+  });
+  assert.equal(direct.status, 409);
   const quoteBody = await quote.json();
   assert.equal(quoteBody.cost_estimate_usd, 0.34);
-  const rented = await fetch(`http://127.0.0.1:${port}/api/rent/sessions`, {
+  const bodyOnly = await fetch(`http://127.0.0.1:${port}/api/rent/sessions`, {
     method: "POST",
     headers: { cookie, "Content-Type": "application/json", "X-CSRF-Token": csrf },
     body: JSON.stringify({ preset_id: "comfyui-minimax-h3", hours: 1, offer_id: "runpod:community:RTX", confirm: true, require_regions: ["EU"] }),
   });
-  assert.equal(rented.status, 201);
-  assert.equal(seen.confirm, true);
-  assert.equal(seen.header, "true");
+  // The panel adds the header when the operator set confirm. This request does that.
+  assert.equal(bodyOnly.status, 201);
+  assert.equal(seen.header, "1");
+  assert.equal(seen.wckd, "");
+  const rented = bodyOnly;
   const rentedBody = await rented.json();
   assert.equal(rentedBody.api_key, undefined);
   assert.equal(rentedBody.endpoints[0].url, undefined);
@@ -208,6 +225,23 @@ test("csrf, rental confirm and secret scrubbing", async () => {
   const listedBody = await listed.json();
   assert.equal(listedBody.sessions[0].api_key, undefined);
   assert.equal(listedBody.sessions[0].endpoints[0].url, undefined);
+  const capped = await fetch(`http://127.0.0.1:${port}/api/rent/sessions`, {
+    method: "POST",
+    headers: { cookie, "Content-Type": "application/json", "X-CSRF-Token": csrf },
+    body: JSON.stringify({ preset_id: "over-cap", hours: 1, offer_id: "runpod:community:RTX", confirm: true, require_regions: ["EU"] }),
+  });
+  assert.equal(capped.status, 403);
+  const capBody = await capped.json();
+  assert.equal(capBody.error.code, "rent_cap");
+  assert.equal(capBody.error.limit, "max_usd_per_hour");
+  const broken = await fetch(`http://127.0.0.1:${port}/api/rent/sessions`, {
+    method: "POST",
+    headers: { cookie, "Content-Type": "application/json", "X-CSRF-Token": csrf },
+    body: "{",
+  });
+  assert.equal(broken.status, 400);
+  const brokenBody = await broken.json();
+  assert.match(String(brokenBody.error), /JSON/);
 });
 
 test("studio image and speech stay on the panel", async () => {
