@@ -2,14 +2,14 @@
 // No dependencies beyond Node 20+; all upstream credentials stay on this process.
 
 import http from "node:http";
-import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(DIR, "public");
-const VERSION = "0.1.0";
+const VERSION = "0.1.1";
 const PORT = Number(process.env.PORT || 7800);
 const BIND = process.env.PANEL_BIND || "0.0.0.0";
 const GATEWAY = (process.env.GATEWAY_HTTP_URL || process.env.GATEWAY_URL || "http://127.0.0.1:7777")
@@ -37,6 +37,13 @@ const STATIC = {
   "/app.css": ["app.css", "text/css; charset=utf-8"],
   "/app.js": ["app.js", "text/javascript; charset=utf-8"],
 };
+// The asset URL carries a content hash: a deploy gets a new URL, so neither Cloudflare nor a
+// browser can keep serving the old panel after an update.
+const ASSET_VERSION = createHash("sha256")
+  .update(readFileSync(path.join(PUBLIC, "app.js")))
+  .update(readFileSync(path.join(PUBLIC, "app.css")))
+  .digest("hex")
+  .slice(0, 12);
 
 function tokenFromFile() {
   const file = process.env.INVINCIBLE_TOKEN_FILE;
@@ -191,11 +198,15 @@ function staticFile(name, type) {
 }
 
 function loginPage(error = "") {
-  return readFileSync(path.join(PUBLIC, "login.html"), "utf8").replace("{{ERROR}}", error);
+  return readFileSync(path.join(PUBLIC, "login.html"), "utf8")
+    .replace("{{ERROR}}", error)
+    .replaceAll("{{ASSET_VERSION}}", ASSET_VERSION);
 }
 
 function dashboardPage() {
-  return readFileSync(path.join(PUBLIC, "index.html"), "utf8").replace("{{VERSION}}", VERSION);
+  return readFileSync(path.join(PUBLIC, "index.html"), "utf8")
+    .replace("{{VERSION}}", VERSION)
+    .replaceAll("{{ASSET_VERSION}}", ASSET_VERSION);
 }
 
 function rateLimited(ip) {
@@ -244,7 +255,7 @@ const server = http.createServer(async (request, response) => {
     if (asset) {
       const [content, type] = staticFile(asset[0], asset[1]);
       securityHeaders(response);
-      response.writeHead(200, { "Content-Type": type, "Cache-Control": "public, max-age=300" });
+      response.writeHead(200, { "Content-Type": type, "Cache-Control": "public, max-age=31536000, immutable" });
       return response.end(content);
     }
 
