@@ -143,8 +143,14 @@ routine question, a stall limit (three times as long while a tool runs), a five-
 wait with `retry_at` for longer ones, and an approver that never accepts: every safety check is
 declined with a redirect, reported as `delegate.declined`, and not worked around. The panel's
 **Keep going** renders the run's nudges, declines and summary, and a configured `[delegate]
-webhook` gets one signed JSON POST with the outcome. The adapter registry and persistent resume
-across a long usage limit remain.
+webhook` gets one signed JSON POST with the outcome.
+
+**Shipped in 0.0.26:** delegation respects the owner's explicit words. A task that says to wait,
+not guess, ask first or confirm never gets a nudge; `delegate.started.questions` is `"owner"` and
+the first question ends the run for the owner. The alpha run that exposed this (0.0.25 chose a
+filename after "do not guess") was repeated on 0.0.26 and stopped at the question with no file.
+Panel assets now carry a content hash, so a deploy is visible immediately through the CDN. The
+adapter registry and persistent resume across a long usage limit remain.
 
 **Deployed on 2026-10-28:** the alpha panel at
 [`agent.invincible.sh`](https://agent.invincible.sh) runs the gateway, Autobot and

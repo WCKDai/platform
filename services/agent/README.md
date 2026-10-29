@@ -185,7 +185,7 @@ the host, run `docker compose up -d --build` with `images/autobot/bin/autobot` p
 - A first task from the panel, then `docker compose logs -f agent panel caddy`.
 
 The 0.0.26 alpha stack is deployed through Coolify at
-`https://agent.invincible.sh` and was verified on 2026-10-28:
+`https://agent.invincible.sh` and was verified on 2026-10-29:
 
 - all three containers healthy (`gateway`, `agent`, `panel`); both binaries report `0.0.26`;
 - Let's Encrypt on the origin and a Cloudflare edge certificate on the public name;
@@ -196,7 +196,14 @@ The 0.0.26 alpha stack is deployed through Coolify at
   the panel streamed the live turn with diffs and tool outputs, and **PR** committed, pushed and
   opened a real GitHub pull request through the PAT alone (Workflows write); the panel returned
   `pr_url`/`pr_number`; the test PR was closed, its branch deleted and the thread removed;
-- Playwright drove the chat and thread flows with no page errors.
+- Playwright drove the chat and thread flows with no page errors;
+- a delegated **Keep going** run listed `/workspace` and reported its summary;
+- a delegated run whose task said "ask me, do not guess, then wait for my answer" showed
+  `delegated: questions go to you`, made no nudge, created no file, and ended waiting for the
+  owner; the panel's assets carry a content hash, so the new panel appeared immediately after the
+  deploy.
+- `invincible update` on the local Mac restarted both launchd services, and the new reload path
+  recovered a booted-out job and a changed definition without `service uninstall`.
 
 `/workspace` holds a clone of the public `WCKDai/platform` repository as the working demo
 project; replace it with the project the bot should work on. The panel password, gateway token
