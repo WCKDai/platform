@@ -1,12 +1,15 @@
 const $ = (id) => document.getElementById(id);
-const VIEWS = ["overview", "chat", "workspaces", "delegations", "bots", "project", "providers", "secrets", "variables", "subscriptions", "integrations", "usage", "settings"];
+const VIEWS = ["overview", "chat", "mission", "workspaces", "delegations", "bots", "studio", "gpu", "project", "providers", "secrets", "variables", "subscriptions", "integrations", "usage", "settings"];
 const CHANNELS = ["telegram", "discord", "slack", "email", "signal", "matrix", "whatsapp"];
 const PAGE_META = {
   overview: ["Overview", "The node, the agent, and what needs you."],
   chat: ["Chat", "A conversation with Autobot. Tools, receipts and approvals stay in the transcript."],
+  mission: ["Mission", "Brief, plan, worktrees and delegated runs in one place."],
   workspaces: ["Workspaces", "Parallel worktrees, diffs and pull requests."],
   delegations: ["Delegations", "Tasks that outlive a usage limit, and where they stand."],
-  bots: ["Agents", "Bots, their models, approvals and channels."],
+  bots: ["Botmode", "Status, channels, and what each bot is working on."],
+  studio: ["Studio", "Image, video and audio jobs. Keys stay on the node."],
+  gpu: ["GPU", "EU rentals. Confirm the price before anything starts."],
   project: ["Project", "The standing brief for a large repository."],
   providers: ["Providers", "Gateway models and the agent CLIs installed on this machine."],
   secrets: ["Secrets", "Write-only credentials for connectors and hooks."],
@@ -34,6 +37,16 @@ let adapters = [];
 let secretList = [];
 let paletteIndex = 0;
 let currentView = "overview";
+let navSync = false;
+let chatQuery = "";
+let transcriptQuery = "";
+let attachments = [];
+let boardTasks = [];
+let studioJobs = [];
+let studioKind = "image";
+let rentOffer = null;
+let gpuSessions = [];
+let gpuTimer = 0;
 
 const esc = (value) =>
   String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
@@ -93,7 +106,9 @@ function value(section) {
 function showView(name) {
   if (!VIEWS.includes(name)) name = "overview";
   for (const view of document.querySelectorAll(".view")) view.hidden = view.dataset.view !== name;
-  for (const tab of document.querySelectorAll("#nav button")) tab.classList.toggle("active", tab.dataset.view === name);
+  navSync = true;
+  for (const item of document.querySelectorAll("#nav wa-tree-item[data-view]")) item.selected = item.dataset.view === name;
+  navSync = false;
   currentView = name;
   const [title, subtitle] = PAGE_META[name] || PAGE_META.overview;
   $("page-title").textContent = title;
@@ -108,6 +123,10 @@ function showView(name) {
     fillProjectSelect();
     loadProject($("project-select").value);
   }
+  if (name === "chat") layoutChat();
+  if (name === "mission") loadMission();
+  if (name === "studio") loadStudio();
+  if (name === "gpu") loadGpu();
   window.scrollTo({ top: 0, behavior: "instant" });
 }
 
@@ -177,15 +196,20 @@ function renderApprovals(agent) {
 
 function renderSessions(agent) {
   const sessions = value(agent?.sessions)?.sessions || [];
-  $("sessions").innerHTML = sessions.length
-    ? sessions
+  const filtered = sessions.filter((session) => {
+    if (!chatQuery) return true;
+    const hay = `${session.id} ${session.bot || ""}`.toLowerCase();
+    return hay.includes(chatQuery);
+  });
+  $("sessions").innerHTML = filtered.length
+    ? filtered
         .slice(0, 50)
         .map(
           (session) =>
             `<button type="button" class="conversation ${session.id === selectedSession ? "active" : ""}" data-session="${esc(session.id)}"><span class="name">${esc(session.id)}</span><span class="sub">${esc(session.bot || "default")} · ${esc(when(session.modified))}</span></button>`,
         )
         .join("")
-    : `<p class="muted">No conversations yet.</p>`;
+    : `<p class="empty"><strong>${chatQuery ? "No matches." : "No conversations yet."}</strong><span>${chatQuery ? "Try another id or bot name." : "Send a task to start one."}</span></p>`;
   $("recent").innerHTML = sessions.length
     ? sessions
         .slice(0, 6)
@@ -256,11 +280,21 @@ async function loadPlan() {
 function renderChat(messages) {
   const chat = $("chat");
   if (!messages || !messages.length) {
-    chat.innerHTML = `<p class="muted">No messages yet. Say what Autobot should do.</p>`;
+    chat.innerHTML = `<p class="empty"><strong>No messages yet.</strong><span>Say what Autobot should do.</span></p>`;
     return;
   }
   chat.innerHTML = messages.slice(-60).map(messageBubble).join("");
+  applyTranscriptQuery();
   chat.scrollTop = chat.scrollHeight;
+}
+
+function applyTranscriptQuery() {
+  if (!transcriptQuery) return;
+  const chat = $("chat");
+  const needle = transcriptQuery.toLowerCase();
+  for (const node of chat.querySelectorAll(".bubble")) {
+    if (!node.textContent.toLowerCase().includes(needle)) node.hidden = true;
+  }
 }
 
 function appendBubble(kind, content) {
@@ -275,14 +309,19 @@ function appendBubble(kind, content) {
 }
 
 function liveBubble() {
-  if (!live) live = appendBubble("assistant", "");
+  if (!live) {
+    live = appendBubble("assistant live", "");
+  }
   const chat = $("chat");
   chat.scrollTop = chat.scrollHeight;
   return live;
 }
 
 function clearLive() {
-  if (live) live.remove();
+  if (live) {
+    live.classList.remove("live");
+    if (!live.textContent) live.remove();
+  }
   live = null;
 }
 
@@ -352,7 +391,25 @@ function handleStreamEvent(event) {
     $("chat").scrollTop = $("chat").scrollHeight;
     return;
   }
-  if (event.type === "reasoning") return;
+  if (event.type === "reasoning") {
+    const text = event.delta || event.text || "";
+    if (!text) return;
+    let node = $("chat").querySelector("[data-reasoning]");
+    if (!node) {
+      node = document.createElement("wa-details");
+      node.dataset.reasoning = "1";
+      node.className = "bubble tool";
+      const summary = document.createElement("span");
+      summary.slot = "summary";
+      summary.textContent = "Reasoning";
+      const body = document.createElement("pre");
+      node.append(summary, body);
+      $("chat").append(node);
+    }
+    node.querySelector("pre").textContent += text;
+    $("chat").scrollTop = $("chat").scrollHeight;
+    return;
+  }
   if (event.type === "tool") {
     live = null;
     appendBubble("tool", `› ${event.text || "tool"}`);
@@ -443,17 +500,35 @@ async function runChat(event) {
   if (busy) return;
   const input = $("chat-text");
   const textValue = input.value.trim();
-  if (!textValue) return;
+  const images = attachments.filter((file) => file.image);
+  const files = attachments.filter((file) => !file.image);
+  const folded = files.map((file) => `\n\n[${file.name}]\n${file.text}`).join("");
+  const message = `${textValue}${folded}`.trim();
+  if (!message && !images.length) return;
+  if (message.length > 8000) {
+    toast("That message is longer than 8000 characters", "bad");
+    return;
+  }
   const session = $("chat-session").value.trim();
   const keepGoing = $("chat-delegate").checked;
+  const bot = $("chat-bot").value;
   const button = $("chat-send");
   busy = true;
   button.disabled = true;
   live = null;
-  appendBubble("user", textValue);
+  const bubble = appendBubble("user", message || "(image)");
+  for (const image of images) {
+    const pic = document.createElement("img");
+    pic.alt = image.name;
+    pic.src = image.url;
+    bubble.append(pic);
+  }
   input.value = "";
+  attachments = [];
+  renderAttachments();
   try {
-    const body = { text: textValue, session };
+    const body = { text: message, session, images: images.map((image) => ({ type: "image_url", image_url: { url: image.url } })) };
+    if (bot) body.bot = bot;
     if (keepGoing) body.delegated = { max_nudges: 2 };
     const response = await api("/api/task", {
       method: "POST",
@@ -585,10 +660,10 @@ async function threadAction(action, id) {
   }
   if (action === "pr") {
     const thread = threads.find((item) => item.id === id);
-    const title = prompt("Pull request title", thread?.name || `Autobot: ${thread?.branch || id}`);
-    if (title === null) return;
-    const body = prompt("Pull request body (optional)", "");
-    if (body === null) return;
+    const drafted = await askPr(thread?.name || `Autobot: ${thread?.branch || id}`, "");
+    if (!drafted) return;
+    const title = drafted.title;
+    const body = drafted.body;
     $("thread-output").textContent = "Committing and pushing…";
     try {
       const response = await api(`/api/threads/${encodeURIComponent(id)}/pr`, {
@@ -615,7 +690,7 @@ async function threadAction(action, id) {
     return;
   }
   if (action === "remove") {
-    if (!confirm(`Remove thread ${id}, its worktree and its branch? Uncommitted changes are discarded.`)) return;
+    if (!(await askConfirm(`Remove thread ${id}, its worktree and its branch? Uncommitted changes are discarded.`, "Remove"))) return;
     try {
       const response = await api(`/api/threads/${encodeURIComponent(id)}?force=1`, { method: "DELETE" });
       const result = await response.json();
@@ -629,15 +704,15 @@ async function threadAction(action, id) {
 }
 
 function fillBotSelects(list) {
-  const options = [`<option value="">default</option>`]
-    .concat(list.filter((bot) => !bot.default).map((bot) => `<option value="${esc(bot.name)}">${esc(bot.name)}</option>`))
+  const options = [`<wa-option value="">default</wa-option>`]
+    .concat(list.filter((bot) => !bot.default).map((bot) => `<wa-option value="${esc(bot.name)}">${esc(bot.name)}</wa-option>`))
     .join("");
-  for (const id of ["secret-bot", "config-bot"]) {
+  for (const id of ["secret-bot", "config-bot", "chat-bot"]) {
     const select = $(id);
     if (!select) continue;
     const keep = select.value;
     select.innerHTML = options;
-    if ([...select.options].some((option) => option.value === keep)) select.value = keep;
+    if ([...select.querySelectorAll("wa-option")].some((option) => option.value === keep)) select.value = keep;
   }
 }
 
@@ -650,10 +725,12 @@ function renderBots(section) {
           const channels = (bot.channels || []).filter((channel) => channel.kind !== "api");
           const channelText = channels.length ? channels.map((channel) => `${esc(channel.kind)}${channel.status && channel.status !== "connected" ? ` (${esc(channel.status)})` : ""}`).join(" · ") : `<span class="muted">none</span>`;
           const status = bot.status || (bot.enabled ? "stopped" : "stopped");
-          return `<tr class="bot-row"><td><strong>${esc(bot.name)}</strong>${bot.default ? ` <span class="badge quiet">default</span>` : ""}<div class="muted">${esc(bot.persona || bot.description || "")}</div></td><td class="mono">${esc(bot.model || "—")}</td><td>${esc(bot.approvals || "—")}</td><td><span class="bot-status ${esc(status)}">${esc(status)}</span>${bot.error ? `<div class="muted">${esc(bot.error)}</div>` : ""}</td><td>${channelText}</td><td>${esc(bot.sessions ?? "—")}</td><td><div class="thread-actions"><button class="mini" data-bot-action="${status === "running" ? "disable" : "enable"}" data-name="${esc(bot.name)}">${status === "running" ? "Disable" : "Enable"}</button><button class="mini" data-bot-action="settings" data-name="${esc(bot.name)}">Settings</button></div></td></tr>`;
+          const work = workForBot(bot.name);
+          return `<tr class="bot-row"><td><strong>${esc(bot.name)}</strong>${bot.default ? ` <span class="badge quiet">default</span>` : ""}<div class="muted">${esc(bot.persona || bot.description || "")}</div></td><td class="mono">${esc(bot.model || "—")}</td><td>${esc(bot.approvals || "—")}</td><td><span class="bot-status ${esc(status)}">${esc(status)}</span>${bot.error ? `<div class="muted">${esc(bot.error)}</div>` : ""}</td><td>${channelText}</td><td>${esc(bot.sessions ?? "—")}</td><td>${work}</td><td><div class="thread-actions"><wa-button size="s" variant="neutral" data-bot-action="talk" data-name="${esc(bot.name)}">Talk</wa-button><wa-button size="s" variant="${status === "running" ? "danger" : "brand"}" appearance="outlined" data-bot-action="${status === "running" ? "disable" : "enable"}" data-name="${esc(bot.name)}">${status === "running" ? "Disable" : "Enable"}</wa-button><wa-button size="s" variant="neutral" appearance="plain" data-bot-action="settings" data-name="${esc(bot.name)}">Settings</wa-button></div></td></tr>`;
         })
         .join("")
-    : `<tr><td colspan="7" class="muted">No bots.</td></tr>`;
+    : `<tr><td colspan="8" class="muted">No bots.</td></tr>`;
+  renderBotCards(bots);
 }
 
 async function addBot(event) {
@@ -691,6 +768,18 @@ async function addBot(event) {
 }
 
 async function botAction(action, name) {
+  if (action === "talk") {
+    const bot = bots.find((item) => item.name === name);
+    selectedSession = "";
+    $("chat-session").value = "";
+    $("chat-title").textContent = `New chat · ${name}`;
+    $("chat-session-label").textContent = "not saved yet";
+    $("chat-bot").value = bot?.default ? "" : name;
+    $("chat").innerHTML = `<p class="empty"><strong>Talking to ${esc(name)}.</strong><span>The next message starts a conversation with this bot.</span></p>`;
+    showView("chat");
+    $("chat-text").focus();
+    return;
+  }
   if (action === "settings") {
     $("config-bot").value = name === "default" ? "" : name;
     $("secret-bot").value = name === "default" ? "" : name;
@@ -832,8 +921,8 @@ function renderProviders(gateway, agent, settingsValue) {
         .join("")
     : `<p class="muted">No models reported.</p>`;
   const select = $("model-select");
-  const options = [`<option value="auto">auto (the gateway chooses)</option>`]
-    .concat(models.map((model) => `<option value="${esc(model.id)}">${esc(model.id)}</option>`))
+  const options = [`<wa-option value="auto">auto (the gateway chooses)</wa-option>`]
+    .concat(models.map((model) => `<wa-option value="${esc(model.id)}">${esc(model.id)}</wa-option>`))
     .join("");
   select.innerHTML = options;
   select.value = current;
@@ -978,10 +1067,16 @@ async function write(path, options = {}) {
 }
 
 function toast(message, kind = "") {
+  const variant = kind === "bad" ? "danger" : kind === "good" ? "success" : "neutral";
+  const stack = $("toasts");
+  if (stack?.create) {
+    stack.create(String(message), { variant, duration: 4500 });
+    return;
+  }
   const node = document.createElement("div");
   node.className = `toast ${kind}`;
   node.textContent = message;
-  $("toasts").append(node);
+  stack.append(node);
   setTimeout(() => node.remove(), 4500);
 }
 
@@ -1030,7 +1125,7 @@ async function addVariable(event) {
 }
 
 async function removeVariable(key) {
-  if (!confirm(`Remove variable ${key}?`)) return;
+  if (!(await askConfirm(`Remove variable ${key}?`, "Remove"))) return;
   try {
     await write(`/api/variables/${encodeURIComponent(key)}`, { method: "DELETE" });
     toast(`Variable ${key} removed`, "good");
@@ -1061,15 +1156,15 @@ function fillProjectSelect() {
   const select = $("project-select");
   if (!select) return;
   const keep = select.value;
-  select.innerHTML = [`<option value="">This agent's project</option>`]
+  select.innerHTML = [`<wa-option value="">This agent's project</wa-option>`]
     .concat(
       threads.map(
         (thread) =>
-          `<option value="${esc(thread.id)}">${esc(thread.name || thread.id)} · ${esc(thread.branch)}</option>`,
+          `<wa-option value="${esc(thread.id)}">${esc(thread.name || thread.id)} · ${esc(thread.branch)}</wa-option>`,
       ),
     )
     .join("");
-  if ([...select.options].some((option) => option.value === keep)) select.value = keep;
+  if ([...select.querySelectorAll("wa-option")].some((option) => option.value === keep)) select.value = keep;
 }
 
 async function loadProject(thread = "") {
@@ -1122,7 +1217,7 @@ async function saveProject() {
 }
 
 async function removeProject() {
-  if (!confirm("Remove the brief for this project? The repository's files are untouched.")) return;
+  if (!(await askConfirm("Remove the brief for this project? The repository's files are untouched.", "Remove"))) return;
   const thread = $("project-select").value;
   try {
     await write(`/api/project${thread ? `?thread=${encodeURIComponent(thread)}` : ""}`, { method: "DELETE" });
@@ -1163,7 +1258,7 @@ function renderDelegations(section) {
 }
 
 async function delegationAction(id, action) {
-  if (action === "cancel" && !confirm(`Cancel paused delegation ${id}? Its conversation and worktree stay.`)) return;
+  if (action === "cancel" && !(await askConfirm(`Cancel paused delegation ${id}? Its conversation and worktree stay.`, "Cancel run"))) return;
   try {
     await write(`/api/delegations/${encodeURIComponent(id)}/${action}`, { method: "POST" });
     $("delegation-output").textContent =
@@ -1270,7 +1365,7 @@ async function saveSubscription(event) {
 
 async function removeSubscription(id) {
   const subscription = subscriptions.find((item) => item.id === id);
-  if (!confirm(`Remove ${subscription?.name || id}?`)) return;
+  if (!(await askConfirm(`Remove ${subscription?.name || id}?`, "Remove"))) return;
   try {
     await write(`/api/subscriptions/${encodeURIComponent(id)}`, { method: "DELETE" });
     if ($("subscription-id").value === id) resetSubscriptionForm();
@@ -1294,7 +1389,7 @@ function renderSecrets(section) {
 }
 
 async function removeSecret(name) {
-  if (!confirm(`Remove secret file ${name}?`)) return;
+  if (!(await askConfirm(`Remove secret file ${name}?`, "Remove"))) return;
   try {
     await write(`/api/secrets/${encodeURIComponent(name)}`, { method: "DELETE" });
     toast(`${name} removed`, "good");
@@ -1305,8 +1400,8 @@ async function removeSecret(name) {
 }
 
 function setSelectValue(select, value) {
-  if (![...select.options].some((option) => option.value === value)) {
-    const option = document.createElement("option");
+  if (![...select.querySelectorAll("wa-option")].some((option) => option.value === value)) {
+    const option = document.createElement("wa-option");
     option.value = value;
     option.textContent = value;
     select.append(option);
@@ -1433,7 +1528,7 @@ key ${saved.key} · ${saved.loaded ? "loaded now" : "not loaded"}`;
 }
 
 async function removeProvider(id) {
-  if (!confirm(`Remove provider ${id}? Its key file is deleted and the gateway stops routing to it.`)) return;
+  if (!(await askConfirm(`Remove provider ${id}? Its key file is deleted and the gateway stops routing to it.`, "Remove"))) return;
   try {
     await write(`/api/providers/${encodeURIComponent(id)}`, { method: "DELETE" });
     toast(`${id} removed`, "good");
@@ -1479,10 +1574,10 @@ function fillAdapterThreads() {
   const keep = select.value;
   select.innerHTML = threads.length
     ? threads
-        .map((thread) => `<option value="${esc(thread.id)}">${esc(thread.name || thread.id)} · ${esc(thread.branch)}</option>`)
+        .map((thread) => `<wa-option value="${esc(thread.id)}">${esc(thread.name || thread.id)} · ${esc(thread.branch)}</wa-option>`)
         .join("")
-    : `<option value="">Start a thread in Workspaces first</option>`;
-  if ([...select.options].some((option) => option.value === keep)) select.value = keep;
+    : `<wa-option value="">Start a thread in Workspaces first</wa-option>`;
+  if ([...select.querySelectorAll("wa-option")].some((option) => option.value === keep)) select.value = keep;
 }
 
 function fillAdapterSelects() {
@@ -1491,9 +1586,9 @@ function fillAdapterSelects() {
   const usable = adapters.filter((adapter) => adapter.installed && adapter.runnable);
   const keep = select.value;
   select.innerHTML = usable.length
-    ? usable.map((adapter) => `<option value="${esc(adapter.name)}">${esc(adapter.label || adapter.name)}</option>`).join("")
-    : `<option value="">No external adapter installed</option>`;
-  if ([...select.options].some((option) => option.value === keep)) select.value = keep;
+    ? usable.map((adapter) => `<wa-option value="${esc(adapter.name)}">${esc(adapter.label || adapter.name)}</wa-option>`).join("")
+    : `<wa-option value="">No external adapter installed</wa-option>`;
+  if ([...select.querySelectorAll("wa-option")].some((option) => option.value === keep)) select.value = keep;
   const button = $("adapter-run");
   if (button) button.disabled = !usable.length || !$("adapter-thread")?.value;
   if (!usable.length) $("adapter-status").textContent = "No external adapter is installed on this node.";
@@ -1603,14 +1698,14 @@ function renderPalette(filter = "") {
 
 function openPalette() {
   paletteIndex = 0;
-  $("palette-modal").hidden = false;
   $("palette-input").value = "";
   renderPalette("");
+  $("palette-modal").show();
   $("palette-input").focus();
 }
 
 function closePalette() {
-  $("palette-modal").hidden = true;
+  if ($("palette-modal").open) $("palette-modal").hide();
 }
 
 function paletteChoose(button) {
@@ -1633,6 +1728,8 @@ async function refresh() {
     renderApprovals(data.agent);
     renderSessions(data.agent);
     renderThreads(data.threads);
+    bots = value(data.bots)?.bots || [];
+    await loadBoards();
     renderBots(data.bots);
     renderConnectors(data.bots);
     renderVariables(data.variables);
@@ -1649,6 +1746,9 @@ async function refresh() {
       loadProviders();
       loadProviderAdmin();
     }
+    if (currentView === "mission") loadMission();
+    if (currentView === "studio") refreshStudio();
+    if (currentView === "gpu") refreshGpuSessions();
   } catch (error) {
     setStatus("offline", error.message || "unreachable");
   }
@@ -1663,10 +1763,40 @@ async function logout() {
 }
 
 function bind() {
-  for (const tab of document.querySelectorAll("#nav button")) {
-    tab.addEventListener("click", () => showView(tab.dataset.view));
-  }
+  $("nav-slot").append($("nav"));
+  $("nav").addEventListener("wa-selection-change", (event) => {
+    if (navSync) return;
+    const item = event.detail?.selection?.[0];
+    if (item?.dataset.view) showView(item.dataset.view);
+  });
+  $("menu").addEventListener("click", (event) => {
+    event.stopPropagation();
+    $("nav-drawer").append($("nav"));
+    // Open after this click finishes, or light-dismiss treats it as a click outside.
+    setTimeout(() => $("nav-drawer").show(), 0);
+  });
+  $("nav-drawer").addEventListener("wa-after-hide", () => $("nav-slot").append($("nav")));
   $("chat-form").addEventListener("submit", runChat);
+  $("chat-find").addEventListener("input", (event) => {
+    chatQuery = event.target.value.trim().toLowerCase();
+    renderSessions(overview.agent);
+  });
+  $("transcript-find").addEventListener("input", (event) => {
+    transcriptQuery = event.target.value.trim().toLowerCase();
+    for (const node of $("chat").querySelectorAll(".bubble")) node.hidden = false;
+    applyTranscriptQuery();
+  });
+  $("chat-attach").addEventListener("click", () => $("chat-file").click());
+  $("chat-file").addEventListener("change", addAttachments);
+  $("studio-form").addEventListener("submit", submitStudio);
+  $("studio-tabs").addEventListener("wa-tab-show", (event) => {
+    studioKind = event.detail.name;
+    syncStudioFields();
+  });
+  $("gpu-load").addEventListener("click", loadOffers);
+  $("mission-thread").addEventListener("change", () => loadMission());
+  $("mission-open").addEventListener("click", openMissionChat);
+  $("logout-mobile").addEventListener("click", logout);
   $("chat-new").addEventListener("click", newChat);
   $("thread-form").addEventListener("submit", newThread);
   $("bot-form").addEventListener("submit", addBot);
@@ -1709,11 +1839,16 @@ function bind() {
   document.addEventListener("keydown", (event) => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
       event.preventDefault();
-      if ($("palette-modal").hidden) openPalette();
-      else closePalette();
+      if ($("palette-modal").open) closePalette();
+      else openPalette();
       return;
     }
-    if ($("palette-modal").hidden) return;
+    if (event.key === "Enter" && !event.shiftKey && currentView === "chat" && event.composedPath().includes($("chat-text"))) {
+      event.preventDefault();
+      $("chat-form").requestSubmit();
+      return;
+    }
+    if (!$("palette-modal").open) return;
     if (event.key === "Escape") {
       closePalette();
       return;
@@ -1733,7 +1868,7 @@ function bind() {
   });
 
   document.addEventListener("click", (event) => {
-    const button = event.target.closest("button");
+    const button = event.target.closest("button, wa-button");
     if (!button) return;
     if (button.dataset.answer) answerApproval(button.dataset.id, button.dataset.answer);
     else if (button.dataset.session) {
@@ -1753,7 +1888,585 @@ function bind() {
     else if (button.dataset.secretDelete) removeSecret(button.dataset.secretDelete);
     else if (button.dataset.paletteView || button.dataset.paletteAction) paletteChoose(button);
     else if (button.dataset.viewJump) showView(button.dataset.viewJump);
+    else if (button.dataset.rent) quoteRent(button.dataset.rent);
+    else if (button.dataset.gpuStop) stopRent(button.dataset.gpuStop, button.dataset.force === "1");
+    else if (button.dataset.studioDrop) dropJob(button.dataset.studioDrop);
+    else if (button.dataset.dropFile != null) {
+      attachments.splice(Number(button.dataset.dropFile), 1);
+      renderAttachments();
+    }
   });
+}
+
+function askConfirm(message, okLabel = "Confirm") {
+  return new Promise((resolve) => {
+    const dialog = $("confirm-dialog");
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      dialog.hide();
+      resolve(value);
+    };
+    $("confirm-body").textContent = message;
+    $("confirm-ok").textContent = okLabel;
+    $("confirm-ok").onclick = () => finish(true);
+    $("confirm-cancel").onclick = () => finish(false);
+    dialog.addEventListener("wa-hide", () => finish(false), { once: true });
+    dialog.show();
+  });
+}
+
+function askPr(title, body) {
+  return new Promise((resolve) => {
+    const dialog = $("pr-dialog");
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      dialog.hide();
+      resolve(value);
+    };
+    $("pr-title").value = title;
+    $("pr-body").value = body;
+    $("pr-ok").onclick = () => finish({ title: $("pr-title").value.trim(), body: $("pr-body").value });
+    $("pr-cancel").onclick = () => finish(null);
+    dialog.addEventListener("wa-hide", () => finish(null), { once: true });
+    dialog.show();
+    $("pr-title").focus();
+  });
+}
+
+function renderAttachments() {
+  $("chat-files").innerHTML = attachments
+    .map(
+      (file, index) =>
+        `<span class="chip">${file.image ? `<img alt="" src="${file.url}">` : ""}<span>${esc(file.name)}</span><wa-button size="s" variant="neutral" appearance="plain" type="button" data-drop-file="${index}">Remove</wa-button></span>`,
+    )
+    .join("");
+}
+
+async function addAttachments(event) {
+  const files = [...event.target.files];
+  event.target.value = "";
+  for (const file of files) {
+    if (attachments.length >= 4) {
+      toast("At most 4 attachments", "bad");
+      break;
+    }
+    if (file.type.startsWith("image/")) {
+      if (file.size > 8 * 1024 * 1024) {
+        toast(`${file.name} is larger than 8 MiB`, "bad");
+        continue;
+      }
+      const url = await readFileUrl(file);
+      attachments.push({ name: file.name, image: true, url });
+    } else {
+      const text = (await file.text()).slice(0, 6000);
+      attachments.push({ name: file.name, image: false, text });
+    }
+  }
+  renderAttachments();
+}
+
+function readFileUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+function workForBot(name) {
+  const runs = (delegationData.delegations || []).filter((job) => job.bot === name && (job.state === "running" || job.state === "paused"));
+  const tasks = boardTasks.filter((task) => task.agent === name && (task.status === "running" || task.status === "todo" || task.status === "blocked"));
+  const bits = [
+    ...runs.map((job) => `${job.state}: ${String(job.task || job.session).slice(0, 80)}`),
+    ...tasks.map((task) => `${task.status}: ${String(task.goal || "").slice(0, 80)}`),
+  ];
+  return bits.length ? esc(bits.slice(0, 3).join(" · ")) : `<span class="muted">idle</span>`;
+}
+
+function renderBotCards(list) {
+  const grid = $("bot-grid");
+  if (!grid) return;
+  grid.innerHTML = list.length
+    ? list
+        .map((bot) => {
+          const status = bot.status || "stopped";
+          const channels = (bot.channels || []).filter((channel) => channel.kind !== "api");
+          return `<article class="bot-card"><div class="card-head"><h2>${esc(bot.name)}</h2><span class="badge ${status === "running" ? "" : "quiet"}">${esc(status)}</span></div><p class="small">${esc(bot.persona || bot.description || "No persona yet.")}</p><p class="small mono">${esc(bot.model || "auto")} · ${esc(bot.approvals || "ask")}</p><p class="small">${channels.length ? channels.map((channel) => esc(channel.kind)).join(" · ") : "No channels"}</p><p class="small">${workForBot(bot.name)}</p><div class="row"><wa-button size="s" variant="brand" type="button" data-bot-action="talk" data-name="${esc(bot.name)}">Talk</wa-button></div></article>`;
+        })
+        .join("")
+    : `<p class="empty"><strong>No bots.</strong><span>Add one below. The default agent is included when the node answers.</span></p>`;
+}
+
+async function loadBoards() {
+  const names = bots.length ? bots : [];
+  if (!names.length) {
+    boardTasks = [];
+    return;
+  }
+  const lists = await Promise.all(
+    names.slice(0, 8).map(async (bot) => {
+      const query = bot.default ? "" : `?bot=${encodeURIComponent(bot.name)}`;
+      try {
+        const response = await api(`/api/board${query}`);
+        if (!response.ok) return [];
+        const data = await response.json();
+        return (data.tasks || []).map((task) => ({ ...task, bot: task.agent || bot.name }));
+      } catch {
+        return [];
+      }
+    }),
+  );
+  const seen = new Set();
+  boardTasks = lists.flat().filter((task) => {
+    if (!task.id || seen.has(task.id)) return false;
+    seen.add(task.id);
+    return true;
+  });
+}
+
+function layoutChat() {
+  const split = document.querySelector("wa-split-panel.chat-layout");
+  if (!split) return;
+  const narrow = window.matchMedia("(max-width: 800px)").matches;
+  split.orientation = narrow ? "vertical" : "horizontal";
+  split.position = narrow ? 34 : 28;
+}
+
+async function loadMission() {
+  const select = $("mission-thread");
+  const keep = select.value;
+  select.innerHTML = [`<wa-option value="">Project brief</wa-option>`]
+    .concat(threads.map((thread) => `<wa-option value="${esc(thread.id)}">${esc(thread.name || thread.id)} · ${esc(thread.branch)}</wa-option>`))
+    .join("");
+  if ([...select.querySelectorAll("wa-option")].some((option) => option.value === keep)) select.value = keep;
+  const threadId = select.value;
+  const thread = threads.find((item) => item.id === threadId);
+  try {
+    const response = await api(`/api/project${threadId ? `?thread=${encodeURIComponent(threadId)}` : ""}`);
+    const data = await response.json();
+    $("mission-brief").textContent = response.ok && data.brief ? data.brief : "No brief for this project yet.";
+    $("mission-status").textContent = data.root ? data.root : "No project root reported.";
+  } catch (error) {
+    $("mission-brief").textContent = String(error.message || error);
+  }
+  let plan = null;
+  const session = thread?.session || "";
+  if (session) {
+    try {
+      const response = await api(`/api/plan?session=${encodeURIComponent(session)}`);
+      if (response.ok) plan = await response.json();
+    } catch {}
+  }
+  renderPlanBoard(plan);
+  renderMissionBoard();
+  const related = thread ? [thread] : threads.slice(0, 6);
+  $("mission-work").innerHTML = related.length
+    ? related
+        .map(
+          (item) =>
+            `<div class="ticket"><strong>${esc(item.name || item.id)}</strong><p class="mono">${esc(item.branch)} · ${item.dirty ? "changes" : "clean"}${item.pr_url ? " · PR open" : ""}</p><div class="row"><wa-button size="s" variant="neutral" data-thread="use" data-id="${esc(item.id)}">Chat</wa-button><wa-button size="s" variant="neutral" appearance="plain" data-thread="diff" data-id="${esc(item.id)}">Diff</wa-button></div></div>`,
+        )
+        .join("")
+    : `<p class="empty"><strong>No worktrees.</strong><span>Start a thread in Workspaces.</span></p>`;
+  const runs = (delegationData.delegations || []).filter((job) => !session || job.session === session);
+  $("mission-runs").innerHTML = runs.length
+    ? runs
+        .slice(0, 8)
+        .map(
+          (job) =>
+            `<div class="ticket"><strong>${esc(job.state)}</strong><p>${esc(String(job.task || job.session).slice(0, 180))}</p><p class="mono">${esc(job.bot)} · ${esc(job.resumes)}/${esc(job.max_resumes)}</p></div>`,
+        )
+        .join("")
+    : `<p class="empty"><strong>No delegated runs.</strong><span>Keep going in Chat when you want a run to outlive a usage limit.</span></p>`;
+}
+
+function renderPlanBoard(plan) {
+  const items = plan?.items || [];
+  $("mission-plan-count").textContent = items.length ? `${plan.done ?? 0}/${plan.total ?? items.length}` : "empty";
+  const columns = [
+    ["pending", "To do"],
+    ["doing", "Doing"],
+    ["done", "Done"],
+  ];
+  $("mission-plan").innerHTML = items.length
+    ? columns
+        .map(([status, label]) => {
+          const rows = items.filter((item) => (item.status || "pending") === status || (status === "doing" && item.status === "in_progress"));
+          return `<div class="column"><h3>${label}</h3>${rows.map((item) => `<div class="ticket"><strong>${esc(item.text)}</strong></div>`).join("") || `<p class="muted">None</p>`}</div>`;
+        })
+        .join("")
+    : `<p class="empty"><strong>No plan on this conversation.</strong><span>The todo tool writes it. It shows above the chat once it exists.</span></p>`;
+}
+
+function renderMissionBoard() {
+  const columns = [
+    ["todo", "To do"],
+    ["running", "Running"],
+    ["blocked", "Waiting on you"],
+    ["done", "Done"],
+  ];
+  const open = boardTasks.filter((task) => task.status !== "failed");
+  $("mission-board").innerHTML = open.length
+    ? columns
+        .map(([status, label]) => {
+          const rows = boardTasks.filter((task) => task.status === status);
+          return `<div class="column"><h3>${label}</h3>${
+            rows
+              .map(
+                (task) =>
+                  `<div class="ticket"><strong>${esc(task.goal)}</strong><p>${esc(task.agent)} · ${esc(task.plan || "")}</p>${task.question ? `<p>${esc(task.question)}</p>` : ""}</div>`,
+              )
+              .join("") || `<p class="muted">None</p>`
+          }</div>`;
+        })
+        .join("")
+    : `<p class="empty"><strong>The team board is empty.</strong><span>Plans the lead assigns to other bots show up here, including questions waiting on you.</span></p>`;
+}
+
+function openMissionChat() {
+  const thread = threads.find((item) => item.id === $("mission-thread").value);
+  if (!thread) {
+    showView("chat");
+    return;
+  }
+  threadAction("use", thread.id);
+}
+
+function syncStudioFields() {
+  $("studio-size").hidden = studioKind !== "image";
+  $("studio-voice").hidden = studioKind !== "audio";
+  $("studio-session").hidden = studioKind !== "video";
+}
+
+async function loadStudio() {
+  syncStudioFields();
+  try {
+    const response = await api("/api/studio/capabilities");
+    const data = await response.json();
+    const backends = studioKind === "audio" ? data.speech || [] : data.images || [];
+    const preset = $("studio-preset");
+    const keep = preset.value;
+    preset.innerHTML = [`<wa-option value="auto">auto</wa-option>`]
+      .concat((backends || []).map((item) => `<wa-option value="${esc(item.id)}">${esc(item.id)}${item.healthy === false ? " · down" : ""}</wa-option>`))
+      .join("");
+    if (studioKind === "video") {
+      preset.innerHTML = `<wa-option value="comfyui-minimax-h3">MiniMax H3</wa-option>`;
+    }
+    if ([...preset.querySelectorAll("wa-option")].some((option) => option.value === keep)) preset.value = keep;
+    const names = (studioKind === "audio" ? data.speech : data.images) || [];
+    $("studio-note").textContent =
+      studioKind === "video"
+        ? "Video runs on a rented ComfyUI session. Rent a GPU first if none is ready."
+        : names.length
+          ? `${names.length} ${studioKind} backend${names.length === 1 ? "" : "s"} on this node.`
+          : `No ${studioKind} backend on this node yet.`;
+  } catch (error) {
+    $("studio-note").textContent = String(error.message || error);
+  }
+  await refreshGpuSessions();
+  const session = $("studio-session");
+  const keepSession = session.value;
+  const ready = gpuSessions.filter((item) => item.phase === "ready" || item.phase === "hydrating");
+  session.innerHTML = [`<wa-option value="">Any ready session</wa-option>`]
+    .concat(ready.map((item) => `<wa-option value="${esc(item.id)}">${esc(item.preset_id || item.id)} · ${esc(item.phase)}</wa-option>`))
+    .join("");
+  if ([...session.querySelectorAll("wa-option")].some((option) => option.value === keepSession)) session.value = keepSession;
+  await refreshStudio();
+}
+
+async function refreshStudio() {
+  try {
+    const response = await api("/api/studio/jobs");
+    if (!response.ok) return;
+    const data = await response.json();
+    studioJobs = data.jobs || [];
+    renderStudio();
+  } catch {}
+}
+
+function renderStudio() {
+  $("studio-jobs").innerHTML = studioJobs.length
+    ? studioJobs
+        .map(
+          (job) =>
+            `<article class="job"><div class="card-head"><h2>${esc(job.kind)}</h2><span class="badge ${job.status === "failed" ? "bad" : "quiet"}">${esc(job.status)}</span></div><p>${esc(job.prompt.slice(0, 180))}</p><wa-progress-bar class="meter" value="${Number(job.progress) || 0}" label="${esc(job.status)}"></wa-progress-bar><p class="meta">${esc(job.detail || "")}</p><wa-button size="s" variant="neutral" appearance="plain" data-studio-drop="${esc(job.id)}">Remove</wa-button></article>`,
+        )
+        .join("")
+    : `<p class="empty"><strong>No jobs.</strong><span>Generate an image, a clip, or speech. Progress stays in this queue.</span></p>`;
+  const done = studioJobs.filter((job) => job.media_id);
+  $("studio-gallery").innerHTML = done.length
+    ? done
+        .map((job) => {
+          const src = `/api/studio/media/${encodeURIComponent(job.media_id)}`;
+          if ((job.media_type || "").startsWith("audio")) {
+            return `<figure><audio controls src="${src}"></audio><figcaption>${esc(job.prompt.slice(0, 80))}</figcaption></figure>`;
+          }
+          if ((job.media_type || "").startsWith("video")) {
+            return `<figure><video controls src="${src}"></video><figcaption>${esc(job.prompt.slice(0, 80))}</figcaption></figure>`;
+          }
+          return `<figure><img alt="${esc(job.prompt.slice(0, 80))}" src="${src}"><figcaption>${esc(job.prompt.slice(0, 80))}</figcaption></figure>`;
+        })
+        .join("")
+    : "";
+}
+
+async function submitStudio(event) {
+  event.preventDefault();
+  const prompt = $("studio-prompt").value.trim();
+  if (!prompt) return;
+  $("studio-submit").disabled = true;
+  try {
+    const response = await api("/api/studio/jobs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        kind: studioKind,
+        prompt,
+        preset: $("studio-preset").value,
+        size: $("studio-size").value,
+        voice: $("studio-voice").value,
+        session_id: $("studio-session").value,
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok && !data.job) throw new Error(data.error?.message || data.error || `HTTP ${response.status}`);
+    if (data.job?.status === "failed") toast(data.job.detail || "The job failed", "bad");
+    else toast(data.job?.status === "done" ? "Ready" : "Job queued", data.job?.status === "done" ? "good" : "");
+    if (data.job && (data.job.status === "running" || data.job.status === "waiting")) watchJob(data.job.id);
+    await refreshStudio();
+  } catch (error) {
+    toast(String(error.message || error), "bad");
+  } finally {
+    $("studio-submit").disabled = false;
+  }
+}
+
+async function watchJob(id) {
+  for (let i = 0; i < 60; i += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    try {
+      const response = await api(`/api/studio/jobs/${encodeURIComponent(id)}`);
+      if (!response.ok) return;
+      const data = await response.json();
+      await refreshStudio();
+      if (data.job?.status === "done" || data.job?.status === "failed") return;
+    } catch {
+      return;
+    }
+  }
+}
+
+async function dropJob(id) {
+  await api(`/api/studio/jobs/${encodeURIComponent(id)}`, { method: "DELETE" });
+  await refreshStudio();
+}
+
+function showGpuOff(message) {
+  $("gpu-state").textContent = "not connected";
+  $("gpu-state").className = "badge quiet";
+  $("gpu-banner").innerHTML = `<wa-callout variant="neutral" size="s"><strong>GPU rental not connected on this node</strong><br>${esc(message || "The gateway has no /v1/rent route yet.")}</wa-callout>`;
+  $("gpu-offers").innerHTML = `<tr><td colspan="7" class="muted">GPU rental not connected on this node.</td></tr>`;
+  $("gpu-sessions").innerHTML = `<p class="empty"><strong>GPU rental not connected on this node.</strong><span>Offers and sessions appear here when the gateway proxies /v1/rent.</span></p>`;
+}
+
+async function loadGpu() {
+  try {
+    const response = await api("/api/rent/health");
+    const data = await response.json();
+    if (data.connected === false) {
+      showGpuOff(data.message);
+      return;
+    }
+    $("gpu-state").textContent = "connected";
+    $("gpu-state").className = "badge";
+    $("gpu-banner").innerHTML = "";
+    await refreshGpuSessions();
+    await loadOffers();
+  } catch (error) {
+    showGpuOff(String(error.message || error));
+  }
+}
+
+let rentOffers = [];
+
+async function loadOffers() {
+  const preset = $("gpu-preset").value;
+  const hours = $("gpu-hours").value;
+  const region = $("gpu-region").value || "EU";
+  $("gpu-output").textContent = "Loading EU offers…";
+  try {
+    const response = await api(`/api/rent/offers?preset=${encodeURIComponent(preset)}&hours=${encodeURIComponent(hours)}&require_regions=${encodeURIComponent(region)}`);
+    const data = await response.json();
+    if (data.connected === false) {
+      showGpuOff(data.message);
+      $("gpu-output").textContent = "";
+      return;
+    }
+    if (!response.ok) throw new Error(data.error?.message || data.error || `HTTP ${response.status}`);
+    rentOffers = data.offers || [];
+    $("gpu-offers").innerHTML = rentOffers.length
+      ? rentOffers
+          .map(
+            (offer) =>
+              `<tr><td class="mono">${esc(offer.id)}</td><td>${esc(offer.name || offer.sku)}</td><td>${esc(offer.vram_gb ?? "—")}</td><td>${esc(offer.region || (offer.data_center_ids || []).join(", "))}</td><td class="mono">${offer.usd_per_hr == null ? "—" : `$${Number(offer.usd_per_hr).toFixed(2)}`}</td><td class="mono">${offer.estimate_usd == null ? "—" : `$${Number(offer.estimate_usd).toFixed(2)}`}</td><td><wa-button size="s" variant="brand" type="button" data-rent="${esc(offer.id)}">Review</wa-button></td></tr>`,
+          )
+          .join("")
+      : `<tr><td colspan="7" class="muted">No EU offer matched this preset. Nothing was rented.</td></tr>`;
+    $("gpu-output").textContent = `${rentOffers.length} offer(s). Review one to see the total before it starts.`;
+  } catch (error) {
+    $("gpu-output").textContent = String(error.message || error);
+  }
+}
+
+async function quoteRent(offerId) {
+  const payload = {
+    preset_id: $("gpu-preset").value,
+    hours: Number($("gpu-hours").value),
+    offer_id: offerId,
+    confirm: false,
+    require_regions: [$("gpu-region").value || "EU"],
+    project_id: "panel",
+  };
+  try {
+    const response = await api("/api/rent/sessions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await response.json();
+    if (data.connected === false) {
+      showGpuOff(data.message);
+      return;
+    }
+    if (response.status !== 409) throw new Error(data.error?.message || data.error || `HTTP ${response.status}`);
+    rentOffer = payload;
+    const offer = data.offer || rentOffers.find((item) => item.id === offerId) || {};
+    const rate = offer.usd_per_hr;
+    const total = data.cost_estimate_usd ?? offer.estimate_usd;
+    $("rent-summary").textContent = data.error?.message || "Confirm to rent this offer. Nothing has been created.";
+    $("rent-facts").innerHTML = [
+      ["Offer", offer.id || offerId],
+      ["GPU", offer.name || offer.sku || "—"],
+      ["Region", (data.require_regions || payload.require_regions).join(", ")],
+      ["$/hr", rate == null ? "—" : `$${Number(rate).toFixed(2)}`],
+      ["Hours", String(data.hours || payload.hours)],
+      ["Estimated total", total == null ? "—" : `$${Number(total).toFixed(2)}`],
+    ]
+      .map(([label, fact]) => `<div class="insight"><strong>${esc(label)}</strong><span>${esc(fact)}</span></div>`)
+      .join("");
+    $("rent-ok").onclick = () => confirmRent();
+    $("rent-cancel").onclick = () => $("rent-dialog").hide();
+    $("rent-dialog").show();
+  } catch (error) {
+    toast(String(error.message || error), "bad");
+  }
+}
+
+async function confirmRent() {
+  if (!rentOffer) return;
+  $("rent-ok").disabled = true;
+  try {
+    const response = await api("/api/rent/sessions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...rentOffer, confirm: true }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error?.message || data.error || `HTTP ${response.status}`);
+    $("rent-dialog").hide();
+    toast("Rental started", "good");
+    $("gpu-output").textContent = `session ${data.id || ""} · ${data.phase || "created"}`;
+    await refreshGpuSessions();
+  } catch (error) {
+    toast(String(error.message || error), "bad");
+  } finally {
+    $("rent-ok").disabled = false;
+  }
+}
+
+async function refreshGpuSessions() {
+  try {
+    const response = await api("/api/rent/sessions");
+    const data = await response.json();
+    if (data.connected === false) {
+      if (currentView === "gpu") showGpuOff(data.message);
+      gpuSessions = [];
+      return;
+    }
+    gpuSessions = data.sessions || [];
+    renderGpuSessions();
+  } catch {}
+}
+
+function renderGpuSessions() {
+  const node = $("gpu-sessions");
+  if (!node) return;
+  if (!gpuSessions.length) {
+    node.innerHTML = `<p class="empty"><strong>No sessions.</strong><span>A confirmed rental shows the time left, the cost so far, and Stop.</span></p>`;
+    return;
+  }
+  node.innerHTML = gpuSessions
+    .map((session) => {
+      const cost = sessionCost(session);
+      const live = session.phase !== "terminated" && session.phase !== "failed";
+      return `<article class="session-card"><div class="card-head"><h2>${esc(session.preset_id || "session")}</h2><span class="badge ${session.phase === "failed" ? "bad" : "quiet"}">${esc(session.phase || "unknown")}</span></div><p class="mono">${esc(session.id)}</p><p class="countdown" data-deadline="${esc(session.deadline_at || "")}">${esc(countdown(session.deadline_at))}</p><p class="cost">$${cost.toFixed(2)} so far · $${Number(session.cost_estimate_usd || 0).toFixed(2)} estimate</p><p class="small">${esc(session.data_center || session.offer?.region || "")}</p>${live ? `<div class="row"><wa-button size="s" variant="danger" appearance="outlined" data-gpu-stop="${esc(session.id)}">Stop</wa-button></div>` : ""}</article>`;
+    })
+    .join("");
+  if (gpuTimer) clearInterval(gpuTimer);
+  gpuTimer = setInterval(() => {
+    if (currentView !== "gpu") return;
+    for (const node of document.querySelectorAll("[data-deadline]")) node.textContent = countdown(node.dataset.deadline);
+  }, 1000);
+}
+
+function countdown(deadline) {
+  const end = Date.parse(deadline || "");
+  if (!Number.isFinite(end)) return "—";
+  const ms = end - Date.now();
+  if (ms <= 0) return "ended";
+  const hours = Math.floor(ms / 3600000);
+  const minutes = Math.floor((ms % 3600000) / 60000);
+  const seconds = Math.floor((ms % 60000) / 1000);
+  return `${hours}h ${String(minutes).padStart(2, "0")}m ${String(seconds).padStart(2, "0")}s`;
+}
+
+function sessionCost(session) {
+  if (session.cost_actual_usd != null) return Number(session.cost_actual_usd) || 0;
+  const rate = Number(session.offer?.usd_per_hr);
+  const start = Date.parse(session.created_at || "");
+  if (!Number.isFinite(rate) || !Number.isFinite(start)) return 0;
+  return Math.max(0, rate * ((Date.now() - start) / 3600000));
+}
+
+async function stopRent(id, force) {
+  const session = gpuSessions.find((item) => item.id === id);
+  if (!force) {
+    const ok = await askConfirm(`Stop ${id}? The pod drains, then it is deleted. Cost so far is about $${sessionCost(session || {}).toFixed(2)}.`, "Stop");
+    if (!ok) return;
+  }
+  try {
+    const response = await api(`/api/rent/sessions/${encodeURIComponent(id)}/stop`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ force }),
+    });
+    const data = await response.json();
+    if (response.status === 409 && data.error?.code === "drain_failed") {
+      const again = await askConfirm("Drain did not finish. Force stop deletes the pod anyway and can lose unsynced files.", "Force stop");
+      if (again) return stopRent(id, true);
+      return;
+    }
+    if (!response.ok) throw new Error(data.error?.message || data.error || `HTTP ${response.status}`);
+    toast(force ? "Session force-stopped" : "Session stopped", "good");
+    await refreshGpuSessions();
+  } catch (error) {
+    toast(String(error.message || error), "bad");
+  }
 }
 
 async function start() {
@@ -1766,6 +2479,10 @@ async function start() {
     return (location.href = "/login");
   }
   bind();
+  window.addEventListener("hashchange", () => showView(location.hash.slice(1) || "overview"));
+  window.addEventListener("resize", () => {
+    if (currentView === "chat") layoutChat();
+  });
   showView(location.hash.slice(1) || "overview");
   await refresh();
   timer = setInterval(() => {

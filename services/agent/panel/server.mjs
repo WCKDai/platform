@@ -3,13 +3,15 @@
 
 import http from "node:http";
 import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { createRent } from "./rent.mjs";
+import { createStudio } from "./studio.mjs";
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(DIR, "public");
-const VERSION = "0.1.5";
+const VERSION = "0.2.0";
 const PORT = Number(process.env.PORT || 7800);
 const BIND = process.env.PANEL_BIND || "0.0.0.0";
 const GATEWAY = (process.env.GATEWAY_HTTP_URL || process.env.GATEWAY_URL || "http://127.0.0.1:7777")
@@ -23,6 +25,7 @@ const PASSWORD_HASH = process.env.PANEL_PASSWORD_HASH || "";
 const SECURE = /^(1|true|yes|on)$/i.test(process.env.PANEL_SECURE_COOKIES || "");
 const SESSION_MS = 8 * 60 * 60 * 1000;
 const MAX_BODY = 1024 * 1024;
+const TASK_BODY = 12 * 1024 * 1024;
 const LOGIN_WINDOW = 5 * 60 * 1000;
 const LOGIN_LIMIT = 10;
 
@@ -33,15 +36,20 @@ if (!PASSWORD && !PASSWORD_HASH) fail("PANEL_PASSWORD or PANEL_PASSWORD_HASH is 
 const HASH = PASSWORD_HASH || hashPassword(PASSWORD);
 const sessions = new Map();
 const attempts = new Map();
-const STATIC = {
-  "/app.css": ["app.css", "text/css; charset=utf-8"],
-  "/app.js": ["app.js", "text/javascript; charset=utf-8"],
+const MIME = {
+  ".css": "text/css; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".json": "application/json",
+  ".txt": "text/plain; charset=utf-8",
+  ".md": "text/plain; charset=utf-8",
 };
 // The asset URL carries a content hash: a deploy gets a new URL, so neither Cloudflare nor a
 // browser can keep serving the old panel after an update.
 const ASSET_VERSION = createHash("sha256")
   .update(readFileSync(path.join(PUBLIC, "app.js")))
   .update(readFileSync(path.join(PUBLIC, "app.css")))
+  .update(readFileSync(path.join(PUBLIC, "vendor/panel-kit.js")))
   .digest("hex")
   .slice(0, 12);
 
@@ -92,10 +100,11 @@ function send(res, status, body, type = "text/plain; charset=utf-8", extra = {})
   securityHeaders(res);
   res.writeHead(status, { "Content-Type": type, "Cache-Control": "no-store", ...extra });
   res.end(body);
+  return true;
 }
 
 function json(res, status, value) {
-  send(res, status, JSON.stringify(value), "application/json; charset=utf-8");
+  return send(res, status, JSON.stringify(value), "application/json; charset=utf-8");
 }
 
 function redirect(res, location) {
@@ -171,18 +180,65 @@ function validId(id) {
 }
 
 async function upstream(base, route, init = {}) {
-  const { timeout = 20_000, ...options } = init;
+  const { timeout = 20_000, raw = false, ...options } = init;
   const response = await fetch(base + route, {
     ...options,
     headers: { Authorization: `Bearer ${TOKEN}`, ...(options.headers || {}) },
     signal: AbortSignal.timeout(timeout),
   });
+  if (raw) {
+    return {
+      status: response.status,
+      type: response.headers.get("content-type") || "",
+      buf: Buffer.from(await response.arrayBuffer()),
+    };
+  }
   const text = await response.text();
   let value = text;
   try {
     value = JSON.parse(text);
   } catch {}
   return { status: response.status, value };
+}
+
+const SECRET_KEY = /api[_-]?key|secret|password|authorization|access[_-]?key|bearer|^token$|s3_/i;
+
+function scrub(value) {
+  if (Array.isArray(value)) return value.map(scrub);
+  if (!value || typeof value !== "object") return value;
+  const out = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (SECRET_KEY.test(key)) continue;
+    out[key] = scrub(item);
+  }
+  return out;
+}
+
+function publicFile(pathname) {
+  let rel = pathname;
+  try {
+    rel = decodeURIComponent(pathname);
+  } catch {
+    return null;
+  }
+  if (rel.includes("\0")) return null;
+  rel = rel.replace(/^[/\\]+/, "");
+  if (rel !== "app.css" && rel !== "app.js" && rel !== "vendor/panel-kit.js" && !rel.startsWith("vendor/webawesome/")) return null;
+  const root = path.resolve(PUBLIC);
+  const resolved = path.resolve(root, rel);
+  if (resolved !== root && !resolved.startsWith(root + path.sep)) return null;
+  if (!existsSync(resolved)) return null;
+  const stat = statSync(resolved);
+  if (!stat.isFile()) return null;
+  const ext = path.extname(resolved);
+  const type = MIME[ext];
+  if (!type) return null;
+  const chunk = rel.includes("/chunks/");
+  return {
+    body: readFileSync(resolved),
+    type,
+    cache: chunk ? "public, max-age=31536000, immutable" : "public, max-age=300",
+  };
 }
 
 async function safely(base, route) {
@@ -193,9 +249,22 @@ async function safely(base, route) {
   }
 }
 
-function staticFile(name, type) {
-  return [readFileSync(path.join(PUBLIC, name), "utf8"), type];
-}
+const rent = createRent({
+  upstream: (route, init) => upstream(GATEWAY, route, init),
+  safely: (route) => safely(GATEWAY, route),
+  scrub,
+  json,
+  readBody: body,
+});
+
+const studio = createStudio({
+  upstream,
+  safely,
+  json,
+  send,
+  readBody: body,
+  gateway: GATEWAY,
+});
 
 function loginPage(error = "") {
   return readFileSync(path.join(PUBLIC, "login.html"), "utf8")
@@ -251,12 +320,11 @@ const server = http.createServer(async (request, response) => {
       return redirect(response, "/");
     }
 
-    const asset = STATIC[url.pathname];
-    if (asset) {
-      const [content, type] = staticFile(asset[0], asset[1]);
+    const asset = publicFile(url.pathname);
+    if (asset && (request.method === "GET" || request.method === "HEAD")) {
       securityHeaders(response);
-      response.writeHead(200, { "Content-Type": type, "Cache-Control": "public, max-age=31536000, immutable" });
-      return response.end(content);
+      response.writeHead(200, { "Content-Type": asset.type, "Cache-Control": asset.cache });
+      return response.end(request.method === "HEAD" ? undefined : asset.body);
     }
 
     const session = current(request);
@@ -658,14 +726,38 @@ const server = http.createServer(async (request, response) => {
       return json(response, result.status, result.value);
     }
 
+    if (url.pathname === "/api/board" && request.method === "GET") {
+      const bot = String(url.searchParams.get("bot") || "").trim();
+      if (bot && !validId(bot)) return json(response, 400, { error: "not a bot name" });
+      const route = bot ? `/v1/agent/board?bot=${encodeURIComponent(bot)}` : "/v1/agent/board";
+      const result = await safely(AGENT, route);
+      return json(response, result.status || 502, result.value);
+    }
+
+    if (await rent(url, request, response)) return;
+    if (await studio(url, request, response)) return;
+
     if (url.pathname === "/api/task" && request.method === "POST") {
-      const payload = JSON.parse(await body(request));
+      const payload = JSON.parse(await body(request, TASK_BODY));
       const text = String(payload.text || "").trim();
       const id = String(payload.session || "").trim() || `panel-${Date.now().toString(36)}`;
-      if (!text) return json(response, 400, { error: "the task is empty" });
+      const images = Array.isArray(payload.images) ? payload.images.slice(0, 4) : [];
+      if (!text && !images.length) return json(response, 400, { error: "the task is empty" });
       if (text.length > 8000) return json(response, 400, { error: "the task is longer than 8000 characters" });
       if (!validId(id)) return json(response, 400, { error: "the session id is not valid" });
-      const turnBody = { text };
+      for (const image of images) {
+        const urlValue = image?.image_url?.url || image?.image_url || image?.url;
+        if (typeof urlValue !== "string" || !urlValue.startsWith("data:image/")) {
+          return json(response, 400, { error: "an image must be a data:image URL" });
+        }
+        if (urlValue.length > 14 * 1024 * 1024) return json(response, 400, { error: "an image is too large" });
+      }
+      const turnBody = { text, images };
+      const botName = String(payload.bot || "").trim();
+      if (botName) {
+        if (!validId(botName)) return json(response, 400, { error: "not a bot name" });
+        turnBody.bot = botName;
+      }
       if (payload.delegated !== undefined) turnBody.delegated = payload.delegated;
       const reply = await fetch(`${AGENT}/v1/agent/sessions/${encodeURIComponent(id)}/turns`, {
         method: "POST",

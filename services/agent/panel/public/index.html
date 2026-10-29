@@ -1,73 +1,54 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="wa-dark wa-brand-purple">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <title>Invincible Control</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23121211'/%3E%3Crect x='3' y='3' width='4' height='10' fill='%239373ff'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/vendor/webawesome/styles/themes/default.css">
   <link rel="stylesheet" href="/app.css?v={{ASSET_VERSION}}">
+  <script type="module" src="/vendor/panel-kit.js"></script>
 </head>
 <body>
+  <a class="skip" href="#content">Skip to content</a>
   <div class="shell">
-    <aside class="sidebar">
+    <aside class="sidebar" id="sidebar">
       <a class="brand" href="/" aria-label="Invincible Control">
         <span class="mark" aria-hidden="true"></span>
         <span class="brand-text"><strong>Invincible</strong><span>Control</span></span>
       </a>
-
-      <nav id="nav" class="nav" aria-label="Control panel sections">
-        <div class="nav-group">
-          <p class="nav-label">Operate</p>
-          <button type="button" data-view="overview">Overview</button>
-          <button type="button" data-view="chat">Chat</button>
-          <button type="button" data-view="workspaces">Workspaces</button>
-          <button type="button" data-view="delegations">Delegations</button>
-        </div>
-        <div class="nav-group">
-          <p class="nav-label">Configure</p>
-          <button type="button" data-view="bots">Agents</button>
-          <button type="button" data-view="project">Project</button>
-          <button type="button" data-view="providers">Providers</button>
-          <button type="button" data-view="secrets">Secrets</button>
-          <button type="button" data-view="variables">Variables</button>
-          <button type="button" data-view="subscriptions">Subscriptions</button>
-          <button type="button" data-view="integrations">Integrations</button>
-        </div>
-        <div class="nav-group">
-          <p class="nav-label">Observe</p>
-          <button type="button" data-view="usage">Usage</button>
-        </div>
-        <div class="nav-group">
-          <p class="nav-label">System</p>
-          <button type="button" data-view="settings">Settings</button>
-        </div>
-      </nav>
-
+      <div id="nav-slot"></div>
       <div class="sidebar-foot">
-        <div class="node-state">
-          <span id="status" class="status">connecting</span>
-          <span id="updated" class="updated">—</span>
-        </div>
         <span id="footer-status" class="footer-status">reading the node</span>
-        <button id="logout" class="ghost small" type="button">Sign out</button>
+        <wa-button id="logout" variant="neutral" appearance="outlined" size="s">Sign out</wa-button>
       </div>
     </aside>
 
     <div class="workspace">
       <header class="topbar">
+        <wa-button id="menu" variant="neutral" appearance="outlined" size="s" aria-label="Open sections">
+          <wa-icon slot="prefix" name="bars" library="system"></wa-icon>
+          Sections
+        </wa-button>
         <div class="page-id">
           <h1 id="page-title">Overview</h1>
           <p id="page-subtitle">The node, the agent, and what needs you.</p>
         </div>
+        <div class="node-state">
+          <span id="status" class="status">connecting</span>
+          <span id="updated" class="updated">—</span>
+        </div>
         <div class="top-actions">
-          <button id="refresh" class="ghost" type="button">Refresh</button>
-          <button id="palette" class="command" type="button" aria-label="Open command palette">
-            <span>Jump to</span><kbd>⌘ K</kbd>
-          </button>
+          <wa-button id="refresh" variant="neutral" appearance="outlined" size="s">Refresh</wa-button>
+          <wa-button id="palette" variant="neutral" appearance="outlined" size="s" aria-label="Open command palette">
+            Jump to <kbd>⌘K</kbd>
+          </wa-button>
+          <wa-button id="logout-mobile" class="menu-only" variant="neutral" appearance="plain" size="s">Sign out</wa-button>
         </div>
       </header>
 
-      <main class="content">
+      <main class="content" id="content">
         <section class="view" data-view="overview">
           <div class="grid overview-grid">
             <article class="card">
@@ -75,7 +56,6 @@
               <div id="gateway-node" class="muted">Reading the node…</div>
               <div id="models" class="models"></div>
             </article>
-
             <article class="card">
               <div class="card-head"><h2>Agent</h2><span id="agent-state" class="badge">—</span></div>
               <div class="stats">
@@ -85,9 +65,8 @@
               </div>
               <div id="agent-info" class="muted">Reading the agent…</div>
             </article>
-
             <article class="card">
-              <div class="card-head"><h2>Today</h2><span class="badge quiet">tokens &amp; cost</span></div>
+              <div class="card-head"><h2>Today</h2><span class="badge quiet">tokens and cost</span></div>
               <div class="stats">
                 <div><span>turns</span><strong id="today-turns">—</strong></div>
                 <div><span>calls</span><strong id="today-calls">—</strong></div>
@@ -95,51 +74,86 @@
               </div>
               <div id="today-tokens" class="muted">—</div>
             </article>
-
             <article class="card">
               <div class="card-head"><h2>Subscriptions</h2><span class="badge quiet">monthly</span></div>
               <div id="subscription-overview" class="list"><p class="muted">No plans recorded.</p></div>
             </article>
-
             <article class="card wide">
               <div class="card-head"><h2>Approvals</h2><span class="badge quiet">needs a decision</span></div>
-              <div id="approvals" class="list"><p class="muted">Nothing waiting.</p></div>
+              <div id="approvals" class="list"><p class="empty"><strong>Nothing waiting.</strong><span>Approvals show up here when a tool needs a decision.</span></p></div>
             </article>
-
             <article class="card wide">
-              <div class="card-head"><h2>Recent conversations</h2><button class="ghost mini" type="button" data-view-jump="chat">Open chat</button></div>
+              <div class="card-head"><h2>Recent conversations</h2><wa-button size="s" variant="neutral" appearance="plain" data-view-jump="chat">Open chat</wa-button></div>
               <div id="recent" class="list"><p class="muted">No conversations yet.</p></div>
             </article>
           </div>
         </section>
 
         <section class="view" data-view="chat" hidden>
-          <div class="chat-layout">
-            <aside class="card conversation-rail">
-              <div class="card-head"><h2>Conversations</h2><span class="badge quiet">newest first</span></div>
+          <wa-split-panel class="chat-layout" position="28">
+            <aside slot="start" class="card conversation-rail">
+              <div class="card-head"><h2>Conversations</h2></div>
+              <wa-input id="chat-find" size="s" placeholder="Search conversations" label="Search conversations" clearable></wa-input>
               <div id="sessions" class="conversation-list"><p class="muted">Reading conversations…</p></div>
             </aside>
-
-            <article class="card chat-card">
+            <article slot="end" class="card chat-card">
               <div class="card-head">
                 <h2 id="chat-title">New conversation</h2>
                 <span class="badge quiet" id="chat-session-label">not saved yet</span>
-                <button id="chat-new" class="ghost mini" type="button">New chat</button>
+                <wa-button id="chat-new" size="s" variant="neutral" appearance="outlined">New chat</wa-button>
               </div>
-              <details id="chat-plan" class="plan" hidden>
-                <summary><span>Plan</span><span id="chat-plan-count" class="muted"></span></summary>
+              <wa-input id="transcript-find" size="s" placeholder="Find in this transcript" label="Find in transcript"></wa-input>
+              <wa-details id="chat-plan" class="plan" hidden>
+                <span slot="summary">Plan <span id="chat-plan-count" class="muted"></span></span>
                 <ol id="chat-plan-items"></ol>
-              </details>
-              <div id="chat" class="chat"><p class="muted">Pick a conversation, or ask Autobot to do something.</p></div>
+              </wa-details>
+              <div id="chat" class="chat" aria-live="polite"><p class="empty"><strong>No messages yet.</strong><span>Pick a conversation, or tell Autobot what to do.</span></p></div>
               <form id="chat-form" class="task composer">
-                <label for="chat-text">Task</label>
-                <textarea id="chat-text" rows="3" maxlength="8000" placeholder="Fix the failing test in checkout.py and run it once." required></textarea>
+                <wa-textarea id="chat-text" rows="3" maxlength="8000" resize="auto" size="s" label="Task" placeholder="Fix the failing test in checkout.py and run it once." required></wa-textarea>
+                <div id="chat-files" class="chips"></div>
                 <div class="row">
-                  <input id="chat-session" type="text" maxlength="80" placeholder="session (optional)" autocomplete="off" spellcheck="false">
-                  <label class="check" title="Keep going without waiting for you. Approvals are declined with a safer path, never accepted."><input id="chat-delegate" type="checkbox"> Keep going</label>
-                  <button class="primary" type="submit" id="chat-send">Send</button>
+                  <wa-input id="chat-session" size="s" maxlength="80" placeholder="session" label="Session" autocomplete="off" spellcheck="false"></wa-input>
+                  <wa-select id="chat-bot" size="s" label="Bot" placeholder="default"></wa-select>
+                  <wa-checkbox id="chat-delegate" size="s">Keep going</wa-checkbox>
+                  <wa-button id="chat-attach" type="button" size="s" variant="neutral" appearance="outlined">Attach</wa-button>
+                  <input id="chat-file" type="file" hidden multiple accept="image/png,image/jpeg,image/webp,image/gif,text/plain,.md,.py,.js,.mjs,.ts,.json,.toml,.css,.html,.rs,.go">
+                  <wa-button id="chat-send" class="primary" variant="brand" type="submit" size="s">Send</wa-button>
                 </div>
+                <p class="small muted">Enter sends. Shift+Enter inserts a line. Images go with the turn. Text files are folded into the message.</p>
               </form>
+            </article>
+          </wa-split-panel>
+        </section>
+
+        <section class="view" data-view="mission" hidden>
+          <div class="grid">
+            <article class="card wide">
+              <div class="card-head"><h2>Mission</h2><span class="badge quiet">brief, plan, worktrees, runs</span></div>
+              <div class="row">
+                <wa-select id="mission-thread" size="s" label="Thread"></wa-select>
+                <wa-button id="mission-open" size="s" variant="neutral" appearance="outlined" type="button">Open in chat</wa-button>
+              </div>
+              <p id="mission-status" class="small muted">Pick a thread to see its plan, or read the project brief.</p>
+            </article>
+            <article class="card">
+              <div class="card-head"><h2>Brief</h2><wa-button size="s" variant="neutral" appearance="plain" data-view-jump="project">Edit</wa-button></div>
+              <pre id="mission-brief" class="output tall">No brief yet.</pre>
+            </article>
+            <article class="card split-main">
+              <div class="card-head"><h2>Plan</h2><span id="mission-plan-count" class="badge quiet">todo</span></div>
+              <div id="mission-plan" class="board"></div>
+            </article>
+            <article class="card wide">
+              <div class="card-head"><h2>Team board</h2><span class="badge quiet">survives the turn</span></div>
+              <div id="mission-board" class="board"></div>
+            </article>
+            <article class="card">
+              <div class="card-head"><h2>Workspaces</h2><wa-button size="s" variant="neutral" appearance="plain" data-view-jump="workspaces">All threads</wa-button></div>
+              <div id="mission-work" class="list"></div>
+            </article>
+            <article class="card split-main">
+              <div class="card-head"><h2>Delegations</h2><wa-button size="s" variant="neutral" appearance="plain" data-view-jump="delegations">Queue</wa-button></div>
+              <div id="mission-runs" class="list"></div>
             </article>
           </div>
         </section>
@@ -148,12 +162,12 @@
           <div class="grid">
             <article class="card wide">
               <div class="card-head"><h2>Workspaces</h2><span class="badge quiet">one worktree per thread</span></div>
-              <p class="small">A thread is a conversation with its own git worktree and branch. Run it from Chat, review the diff, and open a pull request without touching the main checkout.</p>
+              <p class="small">A thread is a conversation with its own git worktree and branch. Chat runs it. Diff and pull request stay off the main checkout.</p>
               <form id="thread-form" class="task">
                 <div class="row">
-                  <input id="thread-name" type="text" maxlength="80" placeholder="name (optional)" autocomplete="off">
-                  <input id="thread-base" type="text" maxlength="120" placeholder="base branch (optional)" autocomplete="off" spellcheck="false">
-                  <button class="primary" type="submit">Start thread</button>
+                  <wa-input id="thread-name" size="s" maxlength="80" placeholder="name" label="Name" autocomplete="off"></wa-input>
+                  <wa-input id="thread-base" size="s" maxlength="120" placeholder="base branch" label="Base" autocomplete="off" spellcheck="false"></wa-input>
+                  <wa-button class="primary" variant="brand" type="submit" size="s">Start thread</wa-button>
                 </div>
               </form>
               <div class="table-wrap">
@@ -171,10 +185,9 @@
           <div class="grid">
             <article class="card wide">
               <div class="card-head"><h2>Delegated runs</h2><span class="badge quiet">survive restarts</span></div>
-              <p class="small">A delegated task that hits a long provider usage limit is kept here instead of lost. Autobot resumes it in the same conversation and worktree when the window reopens, up to five automatic resumes. A run that waits on you is reported, not guessed past.</p>
+              <p class="small">A delegated task that hits a long provider usage limit is kept here. Autobot resumes it in the same conversation and worktree, up to five times. A run that waits on you is reported, not guessed past.</p>
               <div id="delegation-summary" class="stats wide-stats"></div>
             </article>
-
             <article class="card wide">
               <div class="card-head"><h2>Queue and history</h2><span class="badge quiet">10s resume check</span></div>
               <div class="table-wrap">
@@ -191,30 +204,119 @@
         <section class="view" data-view="bots" hidden>
           <div class="grid">
             <article class="card wide">
-              <div class="card-head"><h2>Agents</h2><button id="bots-reload" class="ghost mini" type="button">Reload configuration</button></div>
+              <div class="card-head">
+                <h2>Botmode</h2>
+                <wa-button id="bots-reload" size="s" variant="neutral" appearance="outlined">Reload configuration</wa-button>
+              </div>
+              <p class="small">Status, channels, and what each bot is on. Talk opens a chat with that bot. Enable starts it; disable stops it.</p>
+              <div id="bot-grid" class="bot-grid"></div>
               <div class="table-wrap">
                 <table>
-                  <thead><tr><th>Agent</th><th>Model</th><th>Approvals</th><th>Status</th><th>Channels</th><th>Sessions</th><th></th></tr></thead>
-                  <tbody id="bots"><tr><td colspan="7" class="muted">Reading agents…</td></tr></tbody>
+                  <thead><tr><th>Agent</th><th>Model</th><th>Approvals</th><th>Status</th><th>Channels</th><th>Sessions</th><th>Working on</th><th></th></tr></thead>
+                  <tbody id="bots"><tr><td colspan="8" class="muted">Reading agents…</td></tr></tbody>
                 </table>
               </div>
             </article>
-
             <article class="card wide">
               <div class="card-head"><h2>Add an agent</h2><span class="badge quiet">its own persona and home</span></div>
               <form id="bot-form" class="task form-grid">
-                <div class="field"><label for="bot-name">Name</label><input id="bot-name" type="text" maxlength="32" placeholder="lowercase" required autocomplete="off" spellcheck="false"></div>
-                <div class="field"><label for="bot-description">Purpose</label><input id="bot-description" type="text" maxlength="160" placeholder="what it is for" autocomplete="off"></div>
-                <div class="field"><label for="bot-model">Model</label><input id="bot-model" type="text" maxlength="80" placeholder="auto" autocomplete="off" spellcheck="false"></div>
-                <div class="field"><label for="bot-approvals">Approvals</label><select id="bot-approvals">
-                  <option value="">inherit</option><option value="ask">ask</option><option value="edits">edits</option><option value="auto">auto</option><option value="allowlist">allowlist</option><option value="trust">trust</option>
-                </select></div>
-                <div class="field wide"><label for="bot-tools">Tool groups</label><input id="bot-tools" type="text" maxlength="200" placeholder="files-read, files-write, terminal, web" autocomplete="off" spellcheck="false"></div>
-                <div class="field"><label for="bot-workdir">Working directory</label><input id="bot-workdir" type="text" maxlength="200" placeholder="the bot's project" autocomplete="off" spellcheck="false"></div>
-                <div class="field wide"><label for="bot-soul">Persona</label><textarea id="bot-soul" rows="2" maxlength="4000" placeholder="Who it is, in a sentence or two."></textarea></div>
-                <div class="row"><button class="primary" type="submit">Add agent</button></div>
+                <wa-input id="bot-name" size="s" label="Name" maxlength="32" placeholder="lowercase" required autocomplete="off" spellcheck="false"></wa-input>
+                <wa-input id="bot-description" size="s" label="Purpose" maxlength="160" placeholder="what it is for" autocomplete="off"></wa-input>
+                <wa-input id="bot-model" size="s" label="Model" maxlength="80" placeholder="auto" autocomplete="off" spellcheck="false"></wa-input>
+                <wa-select id="bot-approvals" size="s" label="Approvals">
+                  <wa-option value="">inherit</wa-option>
+                  <wa-option value="ask">ask</wa-option>
+                  <wa-option value="edits">edits</wa-option>
+                  <wa-option value="auto">auto</wa-option>
+                  <wa-option value="allowlist">allowlist</wa-option>
+                  <wa-option value="trust">trust</wa-option>
+                </wa-select>
+                <div class="field wide"><wa-input id="bot-tools" size="s" label="Tool groups" maxlength="200" placeholder="files-read, files-write, terminal, web" autocomplete="off" spellcheck="false"></wa-input></div>
+                <wa-input id="bot-workdir" size="s" label="Working directory" maxlength="200" placeholder="the bot's project" autocomplete="off" spellcheck="false"></wa-input>
+                <div class="field wide"><wa-textarea id="bot-soul" size="s" label="Persona" rows="2" maxlength="4000" placeholder="Who it is, in a sentence or two."></wa-textarea></div>
+                <div class="row"><wa-button class="primary" variant="brand" type="submit" size="s">Add agent</wa-button></div>
               </form>
               <pre id="bot-output" class="output"></pre>
+            </article>
+          </div>
+        </section>
+
+        <section class="view" data-view="studio" hidden>
+          <div class="grid">
+            <article class="card wide">
+              <div class="card-head"><h2>Studio</h2><span class="badge quiet">image, video, audio</span></div>
+              <wa-tab-group id="studio-tabs">
+                <wa-tab slot="nav" panel="image">Image</wa-tab>
+                <wa-tab slot="nav" panel="video">Video</wa-tab>
+                <wa-tab slot="nav" panel="audio">Audio</wa-tab>
+                <wa-tab-panel name="image">Gateway <span class="mono">[[images]]</span>. The key stays on the node.</wa-tab-panel>
+                <wa-tab-panel name="video">Rented ComfyUI, for example MiniMax H3. EU sessions only.</wa-tab-panel>
+                <wa-tab-panel name="audio">Gateway <span class="mono">[[speech]]</span>.</wa-tab-panel>
+              </wa-tab-group>
+              <form id="studio-form" class="task">
+                <wa-textarea id="studio-prompt" size="s" label="Prompt" rows="4" maxlength="4096" required placeholder="What to make."></wa-textarea>
+                <div class="row">
+                  <wa-select id="studio-preset" size="s" label="Preset"><wa-option value="auto">auto</wa-option></wa-select>
+                  <wa-select id="studio-size" size="s" label="Size">
+                    <wa-option value="1024x1024">1024×1024</wa-option>
+                    <wa-option value="1024x1536">1024×1536</wa-option>
+                    <wa-option value="1536x1024">1536×1024</wa-option>
+                  </wa-select>
+                  <wa-select id="studio-voice" size="s" label="Voice">
+                    <wa-option value="">backend default</wa-option>
+                    <wa-option value="af_heart">af_heart</wa-option>
+                    <wa-option value="af_bella">af_bella</wa-option>
+                    <wa-option value="am_adam">am_adam</wa-option>
+                    <wa-option value="bf_emma">bf_emma</wa-option>
+                  </wa-select>
+                  <wa-select id="studio-session" size="s" label="GPU session"><wa-option value="">ready session</wa-option></wa-select>
+                </div>
+                <div class="row">
+                  <wa-button id="studio-submit" class="primary" variant="brand" type="submit" size="s">Generate</wa-button>
+                  <span id="studio-note" class="small muted"></span>
+                </div>
+              </form>
+            </article>
+            <article class="card">
+              <div class="card-head"><h2>Queue</h2><span class="badge quiet">this panel</span></div>
+              <div id="studio-jobs" class="job-list"><p class="empty"><strong>No jobs.</strong><span>A prompt becomes a job with progress, then a file you can play here.</span></p></div>
+            </article>
+            <article class="card split-main">
+              <div class="card-head"><h2>Gallery</h2></div>
+              <div id="studio-gallery" class="gallery"></div>
+            </article>
+          </div>
+        </section>
+
+        <section class="view" data-view="gpu" hidden>
+          <div class="grid">
+            <article class="card wide">
+              <div class="card-head"><h2>GPU rental</h2><span id="gpu-state" class="badge quiet">checking</span></div>
+              <div id="gpu-banner"></div>
+              <form id="gpu-form" class="task">
+                <div class="row">
+                  <wa-select id="gpu-preset" size="s" label="Preset">
+                    <wa-option value="comfyui-minimax-h3">MiniMax H3 (ComfyUI)</wa-option>
+                  </wa-select>
+                  <wa-input id="gpu-hours" size="s" label="Hours" type="number" min="0.5" max="24" step="0.5" value="1"></wa-input>
+                  <wa-radio-group id="gpu-region" label="Region" name="region" value="EU" orientation="horizontal" size="s">
+                    <wa-radio value="EU">EU</wa-radio>
+                    <wa-radio value="EU-secure">EU-secure</wa-radio>
+                  </wa-radio-group>
+                  <wa-button id="gpu-load" type="button" size="s" variant="neutral" appearance="outlined">Load offers</wa-button>
+                </div>
+              </form>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Offer</th><th>GPU</th><th>VRAM</th><th>Region</th><th>$/hr</th><th>Estimate</th><th></th></tr></thead>
+                  <tbody id="gpu-offers"><tr><td colspan="7" class="muted">Load offers to see EU prices. Nothing is rented until you confirm.</td></tr></tbody>
+                </table>
+              </div>
+              <pre id="gpu-output" class="output"></pre>
+            </article>
+            <article class="card wide">
+              <div class="card-head"><h2>Sessions</h2><span class="badge quiet">countdown and cost</span></div>
+              <div id="gpu-sessions" class="session-grid"><p class="empty"><strong>No sessions.</strong><span>A confirmed rental shows the time left, the cost so far, and Stop.</span></p></div>
             </article>
           </div>
         </section>
@@ -223,16 +325,16 @@
           <div class="grid">
             <article class="card wide">
               <div class="card-head"><h2>Project brief</h2><span class="badge quiet">every turn</span></div>
-              <p class="small">The standing context for a large repository: stack, architecture, commands, conventions, invariants and traps. It is kept per project, shared by every thread worktree, and carried in the agent's system prompt on every turn. The repository's own <span class="mono">AGENTS.md</span> files are read as well; this is yours.</p>
+              <p class="small">Standing context for a repository: stack, architecture, commands, conventions, invariants and traps. Shared by every thread worktree and carried on every turn. <span class="mono">AGENTS.md</span> is still read.</p>
               <div class="row">
-                <div class="field"><label for="project-select">Project</label><select id="project-select"><option value="">This agent's project</option></select></div>
-                <div class="field"><label for="project-check">Verification</label><input id="project-check" type="text" readonly placeholder="not set" spellcheck="false"></div>
+                <wa-select id="project-select" size="s" label="Project"><wa-option value="">This agent's project</wa-option></wa-select>
+                <wa-input id="project-check" size="s" label="Verification" readonly placeholder="not set"></wa-input>
               </div>
-              <div class="field"><label for="project-root">Root</label><input id="project-root" type="text" readonly spellcheck="false"></div>
-              <div class="field"><label for="project-brief">Brief</label><textarea id="project-brief" rows="16" maxlength="64000" placeholder="What this project is, how it is built, the commands that must pass, the invariants a change must not break, and where the bodies are buried."></textarea></div>
+              <wa-input id="project-root" size="s" label="Root" readonly></wa-input>
+              <wa-textarea id="project-brief" size="s" label="Brief" rows="16" maxlength="64000" placeholder="What this project is, how it is built, the commands that must pass, and the invariants a change must not break."></wa-textarea>
               <div class="row">
-                <button id="project-save" class="primary" type="button">Save brief</button>
-                <button id="project-remove" class="ghost" type="button">Remove</button>
+                <wa-button id="project-save" class="primary" variant="brand" size="s" type="button">Save brief</wa-button>
+                <wa-button id="project-remove" variant="neutral" appearance="outlined" size="s" type="button">Remove</wa-button>
                 <span id="project-status" class="small muted">Not loaded yet.</span>
               </div>
               <pre id="project-output" class="output"></pre>
@@ -244,17 +346,16 @@
           <div class="grid">
             <article class="card wide">
               <div class="card-head"><h2>Model providers</h2><span class="badge quiet">gateway</span></div>
-              <p class="small" id="provider-note">The gateway serves these models. Provider keys stay in the gateway; the panel never sees them.</p>
+              <p class="small" id="provider-note">The gateway serves these models. Provider keys stay in the gateway.</p>
               <div id="providers" class="list"><p class="muted">Reading models…</p></div>
               <div class="row provider-pick">
-                <select id="model-select"></select>
-                <button id="model-save" class="primary" type="button">Use for this agent</button>
+                <wa-select id="model-select" size="s" label="Model for this agent"></wa-select>
+                <wa-button id="model-save" class="primary" variant="brand" size="s" type="button">Use for this agent</wa-button>
               </div>
             </article>
-
             <article class="card wide">
               <div class="card-head"><h2>Gateway providers</h2><span class="badge quiet">hot reload</span></div>
-              <p class="small">Cloud backends the gateway routes to. A change is written to the gateway's config and loaded on the next request; no restart. The key is write-only.</p>
+              <p class="small">Cloud backends the gateway routes to. A change is written to the gateway config and loaded on the next request. The key is write-only.</p>
               <div class="table-wrap">
                 <table>
                   <thead><tr><th>Provider</th><th>Model</th><th>Endpoint</th><th>Policy</th><th>Key</th><th>Status</th><th></th></tr></thead>
@@ -263,31 +364,42 @@
               </div>
               <pre id="provider-output" class="output"></pre>
             </article>
-
             <article class="card wide">
-              <div class="card-head"><h2 id="provider-form-title">Add a provider</h2><button id="provider-cancel" class="ghost mini" type="button" hidden>Cancel edit</button></div>
+              <div class="card-head"><h2 id="provider-form-title">Add a provider</h2><wa-button id="provider-cancel" size="s" variant="neutral" appearance="plain" type="button" hidden>Cancel edit</wa-button></div>
               <form id="provider-form" class="task form-grid">
                 <input id="provider-edit-id" type="hidden">
-                <div class="field"><label for="provider-preset">Preset</label><select id="provider-preset">
-                  <option value="custom">custom</option><option value="anthropic">Anthropic</option><option value="openai">OpenAI</option><option value="deepseek">DeepSeek</option><option value="openrouter">OpenRouter</option>
-                </select></div>
-                <div class="field"><label for="provider-id">ID</label><input id="provider-id" type="text" maxlength="64" placeholder="claude" required autocomplete="off" spellcheck="false"></div>
-                <div class="field"><label for="provider-model">Provider model</label><input id="provider-model" type="text" maxlength="120" placeholder="claude-sonnet-5-5" autocomplete="off" spellcheck="false"></div>
-                <div class="field"><label for="provider-key">API key</label><input id="provider-key" type="password" maxlength="500" placeholder="Required for a new provider" autocomplete="new-password" spellcheck="false"></div>
-                <div class="field wide"><label for="provider-url">Base URL</label><input id="provider-url" type="url" maxlength="300" placeholder="https://api.anthropic.com/v1" autocomplete="off" spellcheck="false"></div>
-                <div class="field"><label for="provider-context">Context</label><input id="provider-context" type="number" min="1" step="1" placeholder="200000"></div>
-                <div class="field"><label for="provider-policy">Data policy</label><select id="provider-policy">
-                  <option value="unknown">unknown</option><option value="no-retention">no retention</option><option value="retention:30">retention: 30 days</option><option value="retention:7">retention: 7 days</option><option value="trains">trains</option><option value="owned">owned</option>
-                </select></div>
-                <div class="field"><label for="provider-vision">Vision</label><select id="provider-vision"><option value="">auto</option><option value="true">yes</option><option value="false">no</option></select></div>
-                <div class="row"><button class="primary" type="submit">Save provider</button><span id="provider-form-status" class="small muted">The key is never returned to this browser.</span></div>
+                <wa-select id="provider-preset" size="s" label="Preset">
+                  <wa-option value="custom">custom</wa-option>
+                  <wa-option value="anthropic">Anthropic</wa-option>
+                  <wa-option value="openai">OpenAI</wa-option>
+                  <wa-option value="deepseek">DeepSeek</wa-option>
+                  <wa-option value="openrouter">OpenRouter</wa-option>
+                </wa-select>
+                <wa-input id="provider-id" size="s" label="ID" maxlength="64" placeholder="claude" required autocomplete="off" spellcheck="false"></wa-input>
+                <wa-input id="provider-model" size="s" label="Provider model" maxlength="120" placeholder="claude-sonnet-5-5" autocomplete="off" spellcheck="false"></wa-input>
+                <wa-input id="provider-key" size="s" label="API key" type="password" password-toggle maxlength="500" placeholder="Required for a new provider" autocomplete="new-password"></wa-input>
+                <div class="field wide"><wa-input id="provider-url" size="s" label="Base URL" type="url" maxlength="300" placeholder="https://api.anthropic.com/v1" autocomplete="off" spellcheck="false"></wa-input></div>
+                <wa-input id="provider-context" size="s" label="Context" type="number" min="1" step="1" placeholder="200000"></wa-input>
+                <wa-select id="provider-policy" size="s" label="Data policy">
+                  <wa-option value="unknown">unknown</wa-option>
+                  <wa-option value="no-retention">no retention</wa-option>
+                  <wa-option value="retention:30">retention: 30 days</wa-option>
+                  <wa-option value="retention:7">retention: 7 days</wa-option>
+                  <wa-option value="trains">trains</wa-option>
+                  <wa-option value="owned">owned</wa-option>
+                </wa-select>
+                <wa-select id="provider-vision" size="s" label="Vision">
+                  <wa-option value="">auto</wa-option>
+                  <wa-option value="true">yes</wa-option>
+                  <wa-option value="false">no</wa-option>
+                </wa-select>
+                <div class="row"><wa-button class="primary" variant="brand" type="submit" size="s">Save provider</wa-button><span id="provider-form-status" class="small muted">The key is never returned to this browser.</span></div>
               </form>
               <pre id="provider-form-output" class="output"></pre>
             </article>
-
             <article class="card wide">
               <div class="card-head"><h2>Agent providers</h2><span class="badge quiet">installed on this machine</span></div>
-              <p class="small">These are the coding CLIs detected on this machine. They use their own accounts; the gateway never sees those credentials. Run one from <strong>Run an adapter</strong> below.</p>
+              <p class="small">Coding CLIs detected on this machine. They use their own accounts. The gateway never sees those credentials.</p>
               <div class="table-wrap">
                 <table>
                   <thead><tr><th>Provider</th><th>Version</th><th>Auth</th><th>Capabilities</th><th>Status</th></tr></thead>
@@ -295,18 +407,17 @@
                 </table>
               </div>
             </article>
-
             <article class="card wide">
               <div class="card-head"><h2>Run an adapter</h2><span class="badge quiet">in a thread worktree</span></div>
-              <p class="small">An external CLI uses its own account. It runs in the selected thread's worktree, so review the diff before opening a PR. Invincible does not receipt its model calls.</p>
+              <p class="small">An external CLI runs in the selected thread's worktree. Invincible does not receipt its model calls.</p>
               <div class="row">
-                <div class="field"><label for="adapter-thread">Thread</label><select id="adapter-thread"></select></div>
-                <div class="field"><label for="adapter-name">Adapter</label><select id="adapter-name"></select></div>
+                <wa-select id="adapter-thread" size="s" label="Thread"></wa-select>
+                <wa-select id="adapter-name" size="s" label="Adapter"></wa-select>
               </div>
-              <div class="field"><label for="adapter-task">Task</label><textarea id="adapter-task" rows="3" maxlength="8000" placeholder="Fix the failing test in checkout.py and run it once."></textarea></div>
+              <wa-textarea id="adapter-task" size="s" label="Task" rows="3" maxlength="8000" placeholder="Fix the failing test in checkout.py and run it once."></wa-textarea>
               <div class="row">
-                <button id="adapter-run" class="primary" type="button">Run adapter</button>
-                <span id="adapter-status" class="small muted">A run can take minutes; the worktree keeps the changes.</span>
+                <wa-button id="adapter-run" class="primary" variant="brand" size="s" type="button">Run adapter</wa-button>
+                <span id="adapter-status" class="small muted">A run can take minutes. The worktree keeps the changes.</span>
               </div>
               <pre id="adapter-output" class="output tall"></pre>
             </article>
@@ -317,7 +428,7 @@
           <div class="grid">
             <article class="card split-main">
               <div class="card-head"><h2>Stored secrets</h2><span class="badge quiet">values are never shown</span></div>
-              <p class="small">Connector tokens and named secret files in the agent's home. These are read by channels and hooks; they are never returned by the API.</p>
+              <p class="small">Connector tokens and named secret files. They are never returned by the API.</p>
               <div class="table-wrap">
                 <table>
                   <thead><tr><th>Name</th><th>Kind</th><th>Size</th><th>Updated</th><th></th></tr></thead>
@@ -325,15 +436,14 @@
                 </table>
               </div>
             </article>
-
             <article class="card">
               <div class="card-head"><h2>Add or rotate</h2><span class="badge quiet">write-only</span></div>
               <form id="secret-form" class="task">
-                <div class="field"><label for="secret-bot">Agent</label><select id="secret-bot"><option value="">default</option></select></div>
-                <div class="field"><label for="secret-file">File</label><input id="secret-file" type="text" maxlength="80" placeholder="telegram.token" required autocomplete="off" spellcheck="false"></div>
-                <div class="field"><label for="secret-value">Value</label><input id="secret-value" type="password" maxlength="4000" required autocomplete="new-password"></div>
-                <p class="small">A plain file name in the agent's home. It is written with mode 0600 and never returned.</p>
-                <div class="row"><button class="primary" type="submit">Write secret</button></div>
+                <wa-select id="secret-bot" size="s" label="Agent"><wa-option value="">default</wa-option></wa-select>
+                <wa-input id="secret-file" size="s" label="File" maxlength="80" placeholder="telegram.token" required autocomplete="off" spellcheck="false"></wa-input>
+                <wa-input id="secret-value" size="s" label="Value" type="password" password-toggle maxlength="4000" required autocomplete="new-password"></wa-input>
+                <p class="small">A plain file name in the agent's home. Written with mode 0600 and never returned.</p>
+                <div class="row"><wa-button class="primary" variant="brand" type="submit" size="s">Write secret</wa-button></div>
               </form>
               <pre id="secret-output" class="output"></pre>
             </article>
@@ -344,7 +454,7 @@
           <div class="grid">
             <article class="card split-main">
               <div class="card-head"><h2>Variables</h2><span class="badge quiet">visible to the model</span></div>
-              <p class="small">Non-secret context added to every turn: project names, hosts, conventions, paths. Do not put credentials here.</p>
+              <p class="small">Non-secret context added to every turn. Do not put credentials here.</p>
               <div class="table-wrap">
                 <table>
                   <thead><tr><th>Key</th><th>Value</th><th>Description</th><th>Updated</th><th></th></tr></thead>
@@ -352,14 +462,13 @@
                 </table>
               </div>
             </article>
-
             <article class="card">
               <div class="card-head"><h2>Add a variable</h2><span class="badge quiet">one line</span></div>
               <form id="variable-form" class="task">
-                <div class="field"><label for="variable-key">Key</label><input id="variable-key" type="text" maxlength="80" placeholder="project.name" required autocomplete="off" spellcheck="false"></div>
-                <div class="field"><label for="variable-value">Value</label><input id="variable-value" type="text" maxlength="4000" required autocomplete="off"></div>
-                <div class="field"><label for="variable-description">Description</label><input id="variable-description" type="text" maxlength="200" placeholder="optional" autocomplete="off"></div>
-                <div class="row"><button class="primary" type="submit">Save variable</button></div>
+                <wa-input id="variable-key" size="s" label="Key" maxlength="80" placeholder="project.name" required autocomplete="off" spellcheck="false"></wa-input>
+                <wa-input id="variable-value" size="s" label="Value" maxlength="4000" required autocomplete="off"></wa-input>
+                <wa-input id="variable-description" size="s" label="Description" maxlength="200" placeholder="optional" autocomplete="off"></wa-input>
+                <div class="row"><wa-button class="primary" variant="brand" type="submit" size="s">Save variable</wa-button></div>
               </form>
               <pre id="variable-output" class="output"></pre>
             </article>
@@ -372,7 +481,6 @@
               <div class="card-head"><h2>Monthly spend</h2><span class="badge quiet">plans and renewals</span></div>
               <div id="subscription-summary" class="stats wide-stats"></div>
             </article>
-
             <article class="card split-main">
               <div class="card-head"><h2>Plans</h2><span class="badge quiet">cost and renewals</span></div>
               <div class="table-wrap">
@@ -383,26 +491,29 @@
               </div>
               <div id="subscription-upcoming" class="list"></div>
             </article>
-
             <article class="card">
-              <div class="card-head"><h2 id="subscription-form-title">Add a subscription</h2><button id="subscription-cancel" class="ghost mini" type="button" hidden>Cancel edit</button></div>
+              <div class="card-head"><h2 id="subscription-form-title">Add a subscription</h2><wa-button id="subscription-cancel" size="s" variant="neutral" appearance="plain" type="button" hidden>Cancel edit</wa-button></div>
               <form id="subscription-form" class="task">
                 <input id="subscription-id" type="hidden">
-                <div class="field"><label for="subscription-name">Name</label><input id="subscription-name" type="text" maxlength="100" placeholder="Claude Max" required autocomplete="off"></div>
-                <div class="field"><label for="subscription-provider">Provider</label><input id="subscription-provider" type="text" maxlength="80" placeholder="Anthropic" autocomplete="off"></div>
-                <div class="field"><label for="subscription-plan">Plan</label><input id="subscription-plan" type="text" maxlength="80" placeholder="Max 20x" autocomplete="off"></div>
+                <wa-input id="subscription-name" size="s" label="Name" maxlength="100" placeholder="Claude Max" required autocomplete="off"></wa-input>
+                <wa-input id="subscription-provider" size="s" label="Provider" maxlength="80" placeholder="Anthropic" autocomplete="off"></wa-input>
+                <wa-input id="subscription-plan" size="s" label="Plan" maxlength="80" placeholder="Max 20x" autocomplete="off"></wa-input>
                 <div class="row">
-                  <div class="field"><label for="subscription-status">Status</label><select id="subscription-status"><option value="active">active</option><option value="paused">paused</option><option value="cancelled">cancelled</option></select></div>
-                  <div class="field"><label for="subscription-cost">Monthly cost</label><input id="subscription-cost" type="number" min="0" step="0.01" value="0"></div>
-                  <div class="field"><label for="subscription-currency">Currency</label><input id="subscription-currency" type="text" maxlength="3" value="USD" autocomplete="off" spellcheck="false"></div>
+                  <wa-select id="subscription-status" size="s" label="Status">
+                    <wa-option value="active">active</wa-option>
+                    <wa-option value="paused">paused</wa-option>
+                    <wa-option value="cancelled">cancelled</wa-option>
+                  </wa-select>
+                  <wa-input id="subscription-cost" size="s" label="Monthly cost" type="number" min="0" step="0.01" value="0"></wa-input>
+                  <wa-input id="subscription-currency" size="s" label="Currency" maxlength="3" value="USD" autocomplete="off" spellcheck="false"></wa-input>
                 </div>
                 <div class="row">
-                  <div class="field"><label for="subscription-renew">Renews on</label><input id="subscription-renew" type="date"></div>
-                  <div class="field"><label for="subscription-seats">Seats</label><input id="subscription-seats" type="number" min="1" step="1" value="1"></div>
+                  <wa-input id="subscription-renew" size="s" label="Renews on" type="date"></wa-input>
+                  <wa-input id="subscription-seats" size="s" label="Seats" type="number" min="1" step="1" value="1"></wa-input>
                 </div>
-                <div class="field"><label for="subscription-url">URL</label><input id="subscription-url" type="url" maxlength="300" placeholder="https://" autocomplete="off" spellcheck="false"></div>
-                <div class="field"><label for="subscription-notes">Notes</label><textarea id="subscription-notes" rows="2" maxlength="500"></textarea></div>
-                <div class="row"><button class="primary" type="submit">Save subscription</button></div>
+                <wa-input id="subscription-url" size="s" label="URL" type="url" maxlength="300" placeholder="https://" autocomplete="off" spellcheck="false"></wa-input>
+                <wa-textarea id="subscription-notes" size="s" label="Notes" rows="2" maxlength="500"></wa-textarea>
+                <div class="row"><wa-button class="primary" variant="brand" type="submit" size="s">Save subscription</wa-button></div>
               </form>
               <pre id="subscription-output" class="output"></pre>
             </article>
@@ -419,18 +530,16 @@
                   <tbody id="connectors"><tr><td colspan="8" class="muted">Reading connectors…</td></tr></tbody>
                 </table>
               </div>
-              <p class="small">A channel starts when its token file is in the agent's home and the channel is enabled. Add or rotate tokens in <button class="linkish" data-view-jump="secrets" type="button">Secrets</button>.</p>
+              <p class="small">A channel starts when its token file is in the agent's home and the channel is enabled. Tokens are on <wa-button size="s" variant="neutral" appearance="plain" data-view-jump="secrets">Secrets</wa-button>.</p>
             </article>
-
             <article class="card">
               <div class="card-head"><h2>MCP servers</h2><span class="badge quiet">tools from other programs</span></div>
               <div id="mcp" class="list"><p class="muted">None configured.</p></div>
-              <p class="small">Add one with <code>autobot config set mcp.github.command …</code>, or in Settings.</p>
+              <p class="small">Add one in Settings, or with <code>autobot config set mcp.github.command …</code>.</p>
             </article>
-
             <article class="card">
               <div class="card-head"><h2>Webhooks</h2><span class="badge quiet">incoming tasks</span></div>
-              <p class="small">Hooks are configured in the agent's <code>[hooks]</code> section. The panel writes the task and secret files; the gateway routes the public endpoint.</p>
+              <p class="small">Hooks live in the agent's <code>[hooks]</code> section. The panel writes the task and secret files. The gateway routes the public endpoint.</p>
               <pre class="output">[hooks]
 listen = "127.0.0.1:7794"
 
@@ -448,12 +557,10 @@ telegram = true</pre>
               <div id="usage" class="stats wide-stats"></div>
               <div id="usage-note" class="muted"></div>
             </article>
-
             <article class="card wide">
               <div class="card-head"><h2>Models and tools</h2><span class="badge quiet">what ran</span></div>
               <div id="insights" class="list"></div>
             </article>
-
             <article class="card wide">
               <div class="card-head"><h2>Receipts</h2><span class="badge quiet">gateway audit</span></div>
               <div class="table-wrap">
@@ -470,43 +577,43 @@ telegram = true</pre>
           <div class="grid">
             <article class="card">
               <div class="card-head"><h2>Approvals</h2><span class="badge quiet">how much runs alone</span></div>
-              <select id="approvals-select">
-                <option value="ask">ask</option><option value="edits">edits</option><option value="auto">auto</option><option value="allowlist">allowlist</option><option value="trust">trust</option>
-              </select>
-              <div class="row"><button id="approvals-save" class="primary" type="button">Save</button></div>
-              <p class="small">Auto lets commands and project changes run; network and outside reads still ask. Allowlist refuses everything not listed; trust runs everything.</p>
+              <wa-select id="approvals-select" size="s" label="Mode">
+                <wa-option value="ask">ask</wa-option>
+                <wa-option value="edits">edits</wa-option>
+                <wa-option value="auto">auto</wa-option>
+                <wa-option value="allowlist">allowlist</wa-option>
+                <wa-option value="trust">trust</wa-option>
+              </wa-select>
+              <div class="row"><wa-button id="approvals-save" class="primary" variant="brand" size="s" type="button">Save</wa-button></div>
+              <p class="small">Auto lets commands and project changes run. Network and outside reads still ask. Allowlist refuses everything not listed. Trust runs everything.</p>
             </article>
-
             <article class="card">
               <div class="card-head"><h2>Tools</h2><span class="badge quiet">groups</span></div>
               <div id="tools" class="list"><p class="muted">Reading tools…</p></div>
             </article>
-
             <article class="card">
               <div class="card-head"><h2>Verification</h2><span class="badge quiet">before finishing</span></div>
-              <div class="field"><label for="check-command">Check command</label><input id="check-command" type="text" maxlength="500" placeholder="cargo test" autocomplete="off" spellcheck="false"></div>
-              <div class="row"><button id="check-save" class="primary" type="button">Save check</button></div>
+              <wa-input id="check-command" size="s" label="Check command" maxlength="500" placeholder="cargo test" autocomplete="off" spellcheck="false"></wa-input>
+              <div class="row"><wa-button id="check-save" class="primary" variant="brand" size="s" type="button">Save check</wa-button></div>
               <p class="small">After a turn changes files, this runs where commands run. A failure goes back to the model once, then the turn stops with the failure visible.</p>
             </article>
-
             <article class="card wide">
               <div class="card-head"><h2>Agent</h2><span class="badge quiet">read-only</span></div>
               <div id="agent-settings" class="list muted">—</div>
             </article>
-
             <article class="card wide">
               <div class="card-head"><h2>Advanced setting</h2><span class="badge quiet">dotted key</span></div>
               <form id="config-form" class="task">
                 <div class="row">
-                  <select id="config-bot"><option value="">default</option></select>
-                  <input id="config-key" type="text" maxlength="120" placeholder="gateway.model" required autocomplete="off" spellcheck="false">
-                  <input id="config-value" type="text" maxlength="4000" placeholder="value" required autocomplete="off" spellcheck="false">
-                  <label class="check"><input id="config-literal" type="checkbox"> literal string</label>
-                  <button class="primary" type="submit">Set</button>
+                  <wa-select id="config-bot" size="s" label="Agent"><wa-option value="">default</wa-option></wa-select>
+                  <wa-input id="config-key" size="s" label="Key" maxlength="120" placeholder="gateway.model" required autocomplete="off" spellcheck="false"></wa-input>
+                  <wa-input id="config-value" size="s" label="Value" maxlength="4000" placeholder="value" required autocomplete="off" spellcheck="false"></wa-input>
+                  <wa-checkbox id="config-literal" size="s">literal string</wa-checkbox>
+                  <wa-button class="primary" variant="brand" type="submit" size="s">Set</wa-button>
                 </div>
               </form>
               <pre id="config-output" class="output"></pre>
-              <p class="small">Examples: <code>telegram.enabled true</code>, <code>email.address bot@example.org</code>, <code>mcp.github.command npx</code>, <code>agent.check cargo test</code>. A token file is written on Secrets.</p>
+              <p class="small">Examples: <code>telegram.enabled true</code>, <code>email.address bot@example.org</code>, <code>agent.check cargo test</code>. A token file is written on Secrets.</p>
             </article>
           </div>
         </section>
@@ -514,15 +621,63 @@ telegram = true</pre>
     </div>
   </div>
 
-  <div id="toasts" class="toasts" aria-live="polite"></div>
+  <wa-tree id="nav" class="nav-tree" selection="leaf">
+    <wa-tree-item expanded>Operate
+      <wa-tree-item data-view="overview">Overview</wa-tree-item>
+      <wa-tree-item data-view="chat">Chat</wa-tree-item>
+      <wa-tree-item data-view="mission">Mission</wa-tree-item>
+      <wa-tree-item data-view="workspaces">Workspaces</wa-tree-item>
+      <wa-tree-item data-view="delegations">Delegations</wa-tree-item>
+      <wa-tree-item data-view="bots">Botmode</wa-tree-item>
+      <wa-tree-item data-view="studio">Studio</wa-tree-item>
+      <wa-tree-item data-view="gpu">GPU</wa-tree-item>
+    </wa-tree-item>
+    <wa-tree-item expanded>Configure
+      <wa-tree-item data-view="project">Project</wa-tree-item>
+      <wa-tree-item data-view="providers">Providers</wa-tree-item>
+      <wa-tree-item data-view="secrets">Secrets</wa-tree-item>
+      <wa-tree-item data-view="variables">Variables</wa-tree-item>
+      <wa-tree-item data-view="subscriptions">Subscriptions</wa-tree-item>
+      <wa-tree-item data-view="integrations">Integrations</wa-tree-item>
+    </wa-tree-item>
+    <wa-tree-item expanded>Observe
+      <wa-tree-item data-view="usage">Usage</wa-tree-item>
+    </wa-tree-item>
+    <wa-tree-item expanded>System
+      <wa-tree-item data-view="settings">Settings</wa-tree-item>
+    </wa-tree-item>
+  </wa-tree>
 
-  <div id="palette-modal" class="modal" hidden>
-    <div class="palette" role="dialog" aria-modal="true" aria-label="Command palette">
-      <input id="palette-input" type="text" placeholder="Jump to a section or action…" autocomplete="off" spellcheck="false">
-      <div id="palette-list" class="palette-list"></div>
-      <p class="palette-hint">Enter to open · Esc to close</p>
-    </div>
-  </div>
+  <wa-drawer id="nav-drawer" label="Sections" placement="start" light-dismiss></wa-drawer>
+
+  <wa-toast id="toasts" placement="bottom-end"></wa-toast>
+
+  <wa-dialog id="palette-modal" label="Jump to" light-dismiss>
+    <wa-input id="palette-input" size="s" placeholder="Jump to a section or action" label="Command" autocomplete="off" spellcheck="false"></wa-input>
+    <div id="palette-list" class="palette-list"></div>
+    <p class="palette-hint">Enter to open. Esc to close.</p>
+  </wa-dialog>
+
+  <wa-dialog id="confirm-dialog" label="Confirm">
+    <p id="confirm-body"></p>
+    <wa-button id="confirm-cancel" slot="footer" variant="neutral" appearance="outlined" size="s" type="button">Cancel</wa-button>
+    <wa-button id="confirm-ok" slot="footer" variant="brand" size="s" type="button">Confirm</wa-button>
+  </wa-dialog>
+
+  <wa-dialog id="rent-dialog" label="Confirm GPU rental">
+    <p id="rent-summary"></p>
+    <dl class="list" id="rent-facts"></dl>
+    <p class="small">Nothing is created until you confirm. EU placement only. Stop drains the pod before it is deleted.</p>
+    <wa-button id="rent-cancel" slot="footer" variant="neutral" appearance="outlined" size="s" type="button">Back</wa-button>
+    <wa-button id="rent-ok" slot="footer" variant="brand" size="s" type="button">Rent this offer</wa-button>
+  </wa-dialog>
+
+  <wa-dialog id="pr-dialog" label="Open a pull request">
+    <wa-input id="pr-title" size="s" label="Title" maxlength="200"></wa-input>
+    <wa-textarea id="pr-body" size="s" label="Body" rows="4"></wa-textarea>
+    <wa-button id="pr-cancel" slot="footer" variant="neutral" appearance="outlined" size="s" type="button">Cancel</wa-button>
+    <wa-button id="pr-ok" slot="footer" variant="brand" size="s" type="button">Open PR</wa-button>
+  </wa-dialog>
 
   <script type="module" src="/app.js?v={{ASSET_VERSION}}"></script>
 </body>

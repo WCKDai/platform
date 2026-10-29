@@ -1,12 +1,13 @@
 {
   "name": "wckd-agent-panel",
-  "version": "0.1.5",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "Authenticated control panel for Invincible and Autobot",
   "scripts": {
     "start": "node server.mjs",
-    "check": "node --check server.mjs && node --check public/app.js",
+    "check": "node --check server.mjs && node --check rent.mjs && node --check studio.mjs && node --check public/app.js && node --check public/vendor/panel-kit.js",
+    "test": "node --test test/smoke.mjs",
     "hash-password": "node scripts/hash-password.mjs"
   },
   "engines": {
