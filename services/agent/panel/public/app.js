@@ -304,7 +304,8 @@ function handleStreamEvent(event) {
     return;
   }
   if (event.type === "delegate.started") {
-    appendBubble("note", `delegated: up to ${event.max_nudges ?? 0} nudges, approvals declined${event.until ? ` · ${event.until}` : ""}`);
+    const how = event.questions === "owner" ? "questions go to you" : `up to ${event.max_nudges ?? 0} nudges`;
+    appendBubble("note", `delegated: ${how}, approvals declined${event.until ? ` · ${event.until}` : ""}`);
     return;
   }
   if (event.type === "delegate.nudge") {
