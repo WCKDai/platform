@@ -12,12 +12,10 @@ set -eu
 
 HOST="${ALPHA_HOST:?set ALPHA_HOST, for example root@62.83.75.115}"
 VERSION="${VERSION:-v0.0.26}"
-KEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPcmzGvVZ54D6Q2C3VmvaYWJkadXdrgazCwzsx97ebY7 agent-images-release"
 
-ssh -o BatchMode=yes "$HOST" sh -s -- "$VERSION" "$KEY" <<'REMOTE'
+ssh -o BatchMode=yes "$HOST" sh -s -- "$VERSION" <<'REMOTE'
 set -eu
 VERSION="$1"
-KEY="$2"
 BASE="https://github.com/WCKDai/platform/releases/download/agent-images-$VERSION"
 IMAGES="wckd-invincible-gateway wckd-autobot wckd-agent-panel"
 
@@ -29,7 +27,8 @@ echo "fetching agent-images-$VERSION from the public release"
 curl -fsSL "$BASE/SHA256SUMS" -o SHA256SUMS
 curl -fsSL "$BASE/SHA256SUMS.sig" -o SHA256SUMS.sig
 curl -fsSL "$BASE/VERSION" -o VERSION
-printf 'agent-images-release %s\n' "$KEY" > allowed_signers
+# Pinned here, not fetched from the release.
+printf '%s\n' 'agent-images-release ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPcmzGvVZ54D6Q2C3VmvaYWJkadXdrgazCwzsx97ebY7 agent-images-release' > allowed_signers
 ssh-keygen -Y verify -f allowed_signers -I agent-images-release \
   -n agent-images-release -s SHA256SUMS.sig < SHA256SUMS
 [ "$(cat VERSION)" = "$VERSION" ] || {
