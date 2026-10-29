@@ -193,9 +193,11 @@ codeword reached the model and a `todo` plan was written, shown and survived reo
 conversation.
 
 **Deployed on 2026-10-29:** the alpha panel at
-[`agent.invincible.sh`](https://agent.invincible.sh) runs the gateway, Autobot and
-panel together in the PolyCore Coolify project. All three are healthy; login, CSRF, overview,
-an answer turn with a receipt, a tool turn that wrote a file, and logout were verified. The images
-are **public, signed release tarballs** (`agent-images-v0.0.27`) verified on the host and loaded
-locally; the compose uses `pull_policy: never`, so no registry (loopback or GHCR) is in the alpha
-path. GHCR packages remain optional for internal CI.
+[`agent.invincible.sh`](https://agent.invincible.sh) runs the gateway, Autobot and panel together
+in the PolyCore Coolify project, now at **0.0.29** (panel 0.1.4). All three are healthy; login,
+CSRF, overview, a turn that used the project brief's codeword, a `todo` plan shown beside the
+conversation, **Delegations** and **Project**, and logout were verified. The images are **public,
+signed release tarballs** (`agent-images-v0.0.29`) verified on the host and loaded locally; the
+compose uses `pull_policy: never`, so no registry (loopback or GHCR) is in the alpha path. GHCR
+packages remain optional for internal CI. The test brief, plan and session were removed after
+verification.
