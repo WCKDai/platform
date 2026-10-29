@@ -482,13 +482,69 @@ const server = http.createServer(async (request, response) => {
       const thread = String(payload.thread || "").trim();
       if (!task) return json(response, 400, { error: "the task is empty" });
       if (!thread) return json(response, 400, { error: "choose a thread" });
-      const result = await upstream(AGENT, `/v1/agent/adapters/${encodeURIComponent(name)}/run`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ task, thread, timeout_seconds: Number(payload.timeout_seconds) || undefined }),
-        timeout: 60 * 60_000,
+      const stream = Boolean(payload.stream);
+      const bodyText = JSON.stringify({
+        task,
+        thread,
+        timeout_seconds: Number(payload.timeout_seconds) || undefined,
+        stream,
       });
-      return json(response, result.status, result.value);
+      if (!stream) {
+        const result = await upstream(AGENT, `/v1/agent/adapters/${encodeURIComponent(name)}/run`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: bodyText,
+          timeout: 60 * 60_000,
+        });
+        return json(response, result.status, result.value);
+      }
+      // SSE is relayed as it arrives: the CLI can talk for an hour, and buffering it would
+      // make the panel's run button look frozen.
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 60 * 60_000);
+      let upstreamResponse;
+      try {
+        upstreamResponse = await fetch(AGENT + `/v1/agent/adapters/${encodeURIComponent(name)}/run`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" },
+          body: bodyText,
+          signal: controller.signal,
+        });
+      } catch (error) {
+        clearTimeout(timer);
+        return json(response, 502, { error: String(error.message || error) });
+      }
+      if (!upstreamResponse.ok || !upstreamResponse.body) {
+        clearTimeout(timer);
+        const text = await upstreamResponse.text();
+        let value = text;
+        try {
+          value = JSON.parse(text);
+        } catch {}
+        return json(response, upstreamResponse.status, value);
+      }
+      response.writeHead(200, {
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
+        "X-Accel-Buffering": "no",
+      });
+      response.on("close", () => {
+        if (!response.writableEnded) controller.abort();
+      });
+      const reader = upstreamResponse.body.getReader();
+      try {
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          response.write(value);
+        }
+      } catch (error) {
+        if (!response.writableEnded) response.write(`data: ${JSON.stringify({ v: 1, type: "adapter.error", text: String(error.message || error) })}\n\n`);
+      } finally {
+        clearTimeout(timer);
+        response.end();
+      }
+      return;
     }
 
     const delegationAction = url.pathname.match(/^\/api\/delegations\/([^/]+)\/(resume|cancel)$/);

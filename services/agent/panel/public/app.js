@@ -1413,16 +1413,7 @@ async function runAdapter() {
             event = null;
           }
           if (event?.type === "adapter.started") status.textContent = `${event.label || name} is running in ${event.workdir || "its worktree"}…`;
-          else if (event?.type === "adapter.output") {
-            const delta =
-              event.stream === "stderr"
-                ? event.delta
-                    .split("\n")
-                    .map((line) => (line.trim() ? `[stderr] ${line}` : line))
-                    .join("\n")
-                : event.delta;
-            append(delta);
-          }
+          else if (event?.type === "adapter.output") append(event.delta);
           else if (event?.type === "adapter.finished") {
             exit = event.exit_code;
             seconds = event.seconds || 0;
