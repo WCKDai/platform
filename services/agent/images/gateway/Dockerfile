@@ -1,6 +1,6 @@
 FROM debian:bookworm-slim
 
-ARG INVINCIBLE_VERSION=v0.0.28
+ARG INVINCIBLE_VERSION=v0.0.29
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates curl \

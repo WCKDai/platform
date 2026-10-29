@@ -178,6 +178,20 @@ restart turns `running` jobs back into `paused` jobs and tries them again. The p
 cancel a paused run; a newer request in the same conversation replaces an older paused one. The
 `delegate.paused` event carries `job_id`, `auto_resume` and `resumes`.
 
+**Shipped in 0.0.29:** the harness carries the two things a large repository needs across
+turns. A **project brief** is the owner's standing context (stack, architecture, commands,
+conventions, invariants, traps), stored in `$AUTOBOT_HOME/briefs.json` and keyed by canonical
+project root, so every thread worktree shares one even before it is committed. It is capped at
+64 KiB and carried in the system prompt on every step; the panel's **Project** page edits it per
+project. `AGENTS.md` and the other repository context files are still read as before.
+
+The **plan** is now state, not a tool message. The `todo` tool writes the latest list to
+`$AUTOBOT_HOME/sessions/<id>.plan.json`; the system prompt carries it on every step, so it
+survives compaction, a restart and a resumed delegated run. The panel shows it above the
+conversation with a done count, and a reset clears it while a fork copies it. On the Mac, a brief
+codeword reached the model and a `todo` plan was written, shown and survived reopening the
+conversation.
+
 **Deployed on 2026-10-29:** the alpha panel at
 [`agent.invincible.sh`](https://agent.invincible.sh) runs the gateway, Autobot and
 panel together in the PolyCore Coolify project. All three are healthy; login, CSRF, overview,

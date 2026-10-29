@@ -26,6 +26,7 @@
         <div class="nav-group">
           <p class="nav-label">Configure</p>
           <button type="button" data-view="bots">Agents</button>
+          <button type="button" data-view="project">Project</button>
           <button type="button" data-view="providers">Providers</button>
           <button type="button" data-view="secrets">Secrets</button>
           <button type="button" data-view="variables">Variables</button>
@@ -125,6 +126,10 @@
                 <span class="badge quiet" id="chat-session-label">not saved yet</span>
                 <button id="chat-new" class="ghost mini" type="button">New chat</button>
               </div>
+              <details id="chat-plan" class="plan" hidden>
+                <summary><span>Plan</span><span id="chat-plan-count" class="muted"></span></summary>
+                <ol id="chat-plan-items"></ol>
+              </details>
               <div id="chat" class="chat"><p class="muted">Pick a conversation, or ask Autobot to do something.</p></div>
               <form id="chat-form" class="task composer">
                 <label for="chat-text">Task</label>
@@ -210,6 +215,27 @@
                 <div class="row"><button class="primary" type="submit">Add agent</button></div>
               </form>
               <pre id="bot-output" class="output"></pre>
+            </article>
+          </div>
+        </section>
+
+        <section class="view" data-view="project" hidden>
+          <div class="grid">
+            <article class="card wide">
+              <div class="card-head"><h2>Project brief</h2><span class="badge quiet">every turn</span></div>
+              <p class="small">The standing context for a large repository: stack, architecture, commands, conventions, invariants and traps. It is kept per project, shared by every thread worktree, and carried in the agent's system prompt on every turn. The repository's own <span class="mono">AGENTS.md</span> files are read as well; this is yours.</p>
+              <div class="row">
+                <div class="field"><label for="project-select">Project</label><select id="project-select"><option value="">This agent's project</option></select></div>
+                <div class="field"><label for="project-check">Verification</label><input id="project-check" type="text" readonly placeholder="not set" spellcheck="false"></div>
+              </div>
+              <div class="field"><label for="project-root">Root</label><input id="project-root" type="text" readonly spellcheck="false"></div>
+              <div class="field"><label for="project-brief">Brief</label><textarea id="project-brief" rows="16" maxlength="64000" placeholder="What this project is, how it is built, the commands that must pass, the invariants a change must not break, and where the bodies are buried."></textarea></div>
+              <div class="row">
+                <button id="project-save" class="primary" type="button">Save brief</button>
+                <button id="project-remove" class="ghost" type="button">Remove</button>
+                <span id="project-status" class="small muted">Not loaded yet.</span>
+              </div>
+              <pre id="project-output" class="output"></pre>
             </article>
           </div>
         </section>

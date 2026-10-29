@@ -1,5 +1,5 @@
 const $ = (id) => document.getElementById(id);
-const VIEWS = ["overview", "chat", "workspaces", "delegations", "bots", "providers", "secrets", "variables", "subscriptions", "integrations", "usage", "settings"];
+const VIEWS = ["overview", "chat", "workspaces", "delegations", "bots", "project", "providers", "secrets", "variables", "subscriptions", "integrations", "usage", "settings"];
 const CHANNELS = ["telegram", "discord", "slack", "email", "signal", "matrix", "whatsapp"];
 const PAGE_META = {
   overview: ["Overview", "The node, the agent, and what needs you."],
@@ -7,6 +7,7 @@ const PAGE_META = {
   workspaces: ["Workspaces", "Parallel worktrees, diffs and pull requests."],
   delegations: ["Delegations", "Tasks that outlive a usage limit, and where they stand."],
   bots: ["Agents", "Bots, their models, approvals and channels."],
+  project: ["Project", "The standing brief for a large repository."],
   providers: ["Providers", "Gateway models and the agent CLIs installed on this machine."],
   secrets: ["Secrets", "Write-only credentials for connectors and hooks."],
   variables: ["Variables", "Non-secret context added to every turn."],
@@ -99,6 +100,10 @@ function showView(name) {
   document.title = `${title} · Invincible Control`;
   if (location.hash.slice(1) !== name) history.replaceState(null, "", name === "overview" ? location.pathname : `#${name}`);
   if (name === "providers") loadProviders();
+  if (name === "project") {
+    fillProjectSelect();
+    loadProject($("project-select").value);
+  }
   window.scrollTo({ top: 0, behavior: "instant" });
 }
 
@@ -212,6 +217,38 @@ function messageBubble(message) {
   return `<div class="bubble note">${esc(role)}: ${esc(body)}</div>`;
 }
 
+function renderPlan(plan) {
+  const box = $("chat-plan");
+  const items = plan?.items || [];
+  if (!items.length) {
+    box.hidden = true;
+    box.open = false;
+    $("chat-plan-items").innerHTML = "";
+    return;
+  }
+  box.hidden = false;
+  $("chat-plan-count").textContent = `${plan.done ?? 0} of ${plan.total ?? items.length} done`;
+  $("chat-plan-items").innerHTML = items
+    .map((item) => {
+      const status = item.status || "pending";
+      return `<li class="plan-${esc(status)}" title="${esc(status)}"><span class="mark" aria-hidden="true"></span><span>${esc(item.text)}</span></li>`;
+    })
+    .join("");
+  box.open = items.some((item) => item.status !== "done");
+}
+
+async function loadPlan() {
+  if (!selectedSession) {
+    renderPlan(null);
+    return;
+  }
+  try {
+    const response = await api(`/api/plan?session=${encodeURIComponent(selectedSession)}`);
+    if (!response.ok) return;
+    renderPlan(await response.json());
+  } catch {}
+}
+
 function renderChat(messages) {
   const chat = $("chat");
   if (!messages || !messages.length) {
@@ -294,6 +331,7 @@ async function loadHistory(id) {
     if (!response.ok) throw new Error(`history ${response.status}`);
     const data = await response.json();
     renderChat(data.messages || []);
+    renderPlan(data.plan);
   } catch (error) {
     $("chat").innerHTML = `<p class="bubble error">${esc(error.message || error)}</p>`;
   }
@@ -457,6 +495,7 @@ async function runChat(event) {
     live = null;
     try {
       await refresh();
+      await loadPlan();
     } finally {
       button.disabled = false;
     }
@@ -470,6 +509,7 @@ function newChat() {
   $("chat-title").textContent = "New conversation";
   $("chat-session-label").textContent = "not saved yet";
   $("chat").innerHTML = `<p class="muted">Pick a conversation, or ask Autobot to do something.</p>`;
+  renderPlan(null);
   showView("chat");
   $("chat-text").focus();
 }
@@ -492,6 +532,7 @@ function renderThreads(section) {
         .join("")
     : `<tr><td colspan="5" class="muted">No threads yet. Start one above; it gets its own worktree and branch.</td></tr>`;
   fillAdapterThreads();
+  fillProjectSelect();
 }
 
 async function newThread(event) {
@@ -1010,6 +1051,85 @@ function renderSubscriptionOverview(section) {
   ].join("");
 }
 
+let projectData = {};
+
+function fillProjectSelect() {
+  const select = $("project-select");
+  if (!select) return;
+  const keep = select.value;
+  select.innerHTML = [`<option value="">This agent's project</option>`]
+    .concat(
+      threads.map(
+        (thread) =>
+          `<option value="${esc(thread.id)}">${esc(thread.name || thread.id)} · ${esc(thread.branch)}</option>`,
+      ),
+    )
+    .join("");
+  if ([...select.options].some((option) => option.value === keep)) select.value = keep;
+}
+
+async function loadProject(thread = "") {
+  const status = $("project-status");
+  status.textContent = "Reading…";
+  try {
+    const response = await api(`/api/project${thread ? `?thread=${encodeURIComponent(thread)}` : ""}`);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error?.message || data.error || `HTTP ${response.status}`);
+    projectData = data;
+    $("project-root").value = data.root || "";
+    $("project-check").value = data.check || "not set";
+    $("project-brief").value = data.brief || "";
+    status.textContent = data.updated_at
+      ? `Saved ${when(data.updated_at)} · ${data.characters} characters`
+      : "No brief for this project yet.";
+    $("project-output").textContent = "";
+  } catch (error) {
+    status.textContent = String(error.message || error);
+    $("project-output").textContent = "";
+  }
+}
+
+async function saveProject() {
+  const thread = $("project-select").value;
+  const brief = $("project-brief").value;
+  if (brief.length > 64000) {
+    toast("The brief is longer than 64000 characters", "bad");
+    return;
+  }
+  const status = $("project-status");
+  status.textContent = "Saving…";
+  try {
+    const data = await write("/api/project", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ brief, thread: thread || null }),
+    });
+    projectData = data;
+    $("project-brief").value = data.brief || "";
+    status.textContent = data.updated_at
+      ? `Saved ${when(data.updated_at)} · ${data.characters} characters`
+      : "No brief for this project yet.";
+    $("project-output").textContent = data.root || "";
+    toast(brief.trim() ? "Project brief saved" : "Project brief removed", "good");
+  } catch (error) {
+    status.textContent = String(error.message || error);
+    toast(String(error.message || error), "bad");
+  }
+}
+
+async function removeProject() {
+  if (!confirm("Remove the brief for this project? The repository's files are untouched.")) return;
+  const thread = $("project-select").value;
+  try {
+    await write(`/api/project${thread ? `?thread=${encodeURIComponent(thread)}` : ""}`, { method: "DELETE" });
+    $("project-brief").value = "";
+    toast("Project brief removed", "good");
+    await loadProject(thread);
+  } catch (error) {
+    toast(String(error.message || error), "bad");
+  }
+}
+
 function renderDelegations(section) {
   const data = value(section) || {};
   delegationData = data;
@@ -1420,6 +1540,9 @@ function bind() {
   $("model-save").addEventListener("click", setModel);
   $("approvals-save").addEventListener("click", setApprovals);
   $("check-save").addEventListener("click", saveCheck);
+  $("project-select").addEventListener("change", () => loadProject($("project-select").value));
+  $("project-save").addEventListener("click", saveProject);
+  $("project-remove").addEventListener("click", removeProject);
   $("adapter-run").addEventListener("click", runAdapter);
   $("refresh").addEventListener("click", refresh);
   $("palette").addEventListener("click", openPalette);

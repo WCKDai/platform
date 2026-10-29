@@ -9,7 +9,7 @@ import path from "node:path";
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(DIR, "public");
-const VERSION = "0.1.3";
+const VERSION = "0.1.4";
 const PORT = Number(process.env.PORT || 7800);
 const BIND = process.env.PANEL_BIND || "0.0.0.0";
 const GATEWAY = (process.env.GATEWAY_HTTP_URL || process.env.GATEWAY_URL || "http://127.0.0.1:7777")
@@ -500,6 +500,40 @@ const server = http.createServer(async (request, response) => {
         headers: { "Content-Type": "application/json" },
         body: "{}",
       });
+      return json(response, result.status, result.value);
+    }
+
+    if (url.pathname === "/api/plan" && request.method === "GET") {
+      const session = url.searchParams.get("session") || "";
+      if (!/^[A-Za-z0-9_-]{1,64}$/.test(session)) return json(response, 400, { error: "not a session id" });
+      const result = await safely(AGENT, `/v1/agent/plan?session=${encodeURIComponent(session)}`);
+      return json(response, result.status || 502, result.value);
+    }
+
+    if (url.pathname === "/api/project" && request.method === "GET") {
+      const thread = url.searchParams.get("thread");
+      const route = thread ? `/v1/agent/project?thread=${encodeURIComponent(thread)}` : "/v1/agent/project";
+      const result = await safely(AGENT, route);
+      return json(response, result.status || 502, result.value);
+    }
+
+    if (url.pathname === "/api/project" && request.method === "POST") {
+      const payload = JSON.parse(await body(request, 128 * 1024));
+      const result = await upstream(AGENT, "/v1/agent/project", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          brief: String(payload.brief ?? ""),
+          thread: payload.thread ? String(payload.thread) : null,
+        }),
+      });
+      return json(response, result.status, result.value);
+    }
+
+    if (url.pathname === "/api/project" && request.method === "DELETE") {
+      const thread = url.searchParams.get("thread");
+      const route = thread ? `/v1/agent/project?thread=${encodeURIComponent(thread)}` : "/v1/agent/project";
+      const result = await upstream(AGENT, route, { method: "DELETE" });
       return json(response, result.status, result.value);
     }
 
