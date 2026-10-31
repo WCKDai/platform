@@ -34,6 +34,8 @@ already attached to the Coolify control plane.
 
 - Official GitHub runner as a systemd service, registered once with a one-hour token:
   [`scripts/install-runner.sh`](../scripts/install-runner.sh).
+- Register this host with `RUNNER_NAME=alpha`; the shared workflow checks that exact runner name.
+  The installer's generic hostname default is not sufficient on a differently named host.
 - Runner group `trusted`, selected for the eight current organization repositories.
   New repositories require explicit approval; this is not an organization-wide wildcard.
 - Labels: `self-hosted`, `linux`, `x64`, `rust-16`, `trusted`.
@@ -50,8 +52,9 @@ workflow the group allows, including a fork pull request. So:
    commit SHA. GitHub rejects entries for workflows that do not exist at the selected ref.
 3. Only then register the runner.
 
-Until step 3 the group stays `allows_public_repositories=false` and no runner exists, so nothing
-can reach the host.
+For an initial bootstrap, establish the workflow restrictions before enabling public access or
+registering a runner. Alpha is already registered; do not rerun the installer for workflow-only
+changes.
 
 ## Shared trusted builds
 

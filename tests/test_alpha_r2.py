@@ -17,6 +17,12 @@ exec(compile(helpers, '<cache-probe-helpers>', 'exec'), scope)
 
 
 class AlphaPolicyTests(unittest.TestCase):
+    def test_registration_guidance_matches_the_named_runner(self):
+        self.assertIn('[ "$ACTUAL_RUNNER" = alpha ]', WORKFLOW)
+        for relative in ('scripts/install-runner.sh', 'docs/runners.md'):
+            with self.subTest(path=relative):
+                self.assertIn('RUNNER_NAME=alpha', (ROOT / relative).read_text())
+
     def test_manual_dispatch_is_probe_only(self):
         dispatch = WORKFLOW.split('  workflow_dispatch:\n', 1)[1].split('  workflow_call:\n', 1)[0]
         called = WORKFLOW.split('  workflow_call:\n', 1)[1].split('\npermissions:', 1)[0]

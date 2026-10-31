@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Install one persistent GitHub Actions runner for WCKDai on Debian/Ubuntu x86_64.
 #
-#   sudo RUNNER_TOKEN=... ./scripts/install-runner.sh
+#   sudo RUNNER_NAME=alpha RUNNER_TOKEN=... ./scripts/install-runner.sh
 #
 # RUNNER_TOKEN is a one-hour, single-use registration token from
 # https://github.com/organizations/WCKDai/settings/actions/runners/new

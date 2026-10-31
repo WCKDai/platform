@@ -2,10 +2,10 @@ name: Alpha workflow policy
 
 on:
   pull_request:
-    paths: ['.github/workflows/alpha-*.yml', 'tests/test_alpha_r2.py']
+    paths: ['.github/workflows/alpha-*.yml', 'tests/test_alpha_r2.py', 'docs/runners.md', 'scripts/install-runner.sh']
   push:
     branches: [main]
-    paths: ['.github/workflows/alpha-*.yml', 'tests/test_alpha_r2.py']
+    paths: ['.github/workflows/alpha-*.yml', 'tests/test_alpha_r2.py', 'docs/runners.md', 'scripts/install-runner.sh']
 
 permissions:
   contents: read
