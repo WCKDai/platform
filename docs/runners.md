@@ -57,7 +57,9 @@ can reach the host.
 
 The additive `alpha-r2.yml` reusable workflow provides a trusted build entry point without
 migrating lightweight Python/JavaScript jobs or weakening existing PR gates. Call it only from
-`main` on `push`, `schedule`, or an owner-dispatched run. PRs and forks must stay GitHub-hosted.
+`main` on `push`, `schedule`, or a reviewed caller's manual trigger. PRs and forks must stay
+GitHub-hosted. Direct manual dispatch of the shared workflow runs fixed probes only; it has no
+command input and cannot turn repository write access into an unreviewed shell on alpha.
 Pin the reviewed shared-workflow commit SHA, and ensure that exact SHA is included in the
 runner-group workflow allowlist before using it. Merely granting repository access is not proof
 that a job can run: the workflow allowlist is a second independent gate.
@@ -78,8 +80,11 @@ jobs:
 
 `command` is deliberately executable **trusted main-branch code**. This is not a sandbox for
 untrusted inputs. There is no arbitrary checkout-ref input: checkout is the caller's immutable
-`github.sha`, without persisted credentials. Empty command means infrastructure probes only.
+`github.sha`, without persisted credentials. Only reusable callers may supply `command`; use a
+fixed command in reviewed workflow code, not an unrestricted dispatch/issue input. An empty
+reusable command, or direct manual dispatch, means infrastructure probes only.
 Use `cache: false` for jobs that do not compile native code; that run does not verify R2.
+Rust uses `RUSTC_WRAPPER`; C/C++ callers can explicitly invoke `sccache gcc` or `sccache clang`.
 Builds use four jobs/threads, `nice`, a 10 GiB disk floor and the existing load ceiling of 24.
 Only one Actions job runs on the single alpha runner at a time; do not start competing SSH builds.
 

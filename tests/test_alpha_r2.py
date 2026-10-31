@@ -16,6 +16,12 @@ exec(compile(helpers, '<cache-probe-helpers>', 'exec'), scope)
 
 
 class AlphaPolicyTests(unittest.TestCase):
+    def test_manual_dispatch_is_probe_only(self):
+        dispatch = WORKFLOW.split('  workflow_dispatch:\n', 1)[1].split('  workflow_call:\n', 1)[0]
+        called = WORKFLOW.split('  workflow_call:\n', 1)[1].split('\npermissions:', 1)[0]
+        self.assertNotRegex(dispatch, r'\bcommand:', 'Manual writers must not bypass reviewed build commands')
+        self.assertRegex(called, r'\bcommand:', 'Reviewed reusable callers retain build support')
+
     def test_only_trusted_main_events_reach_alpha(self):
         self.assertIn("github.repository_owner == 'WCKDai' && github.ref == 'refs/heads/main'", WORKFLOW)
         self.assertIn('fromJSON(\'["push","schedule","workflow_dispatch"]\')', WORKFLOW)

@@ -77,7 +77,7 @@ AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
 
 ## Verification
 
-Prefer dispatching **Alpha and R2** on `main` with an empty command after its workflow has been
+Prefer dispatching **Alpha and R2** on `main` after its workflow has been
 allowed in the trusted runner group. It checks alpha and proves a remote cache write and hit
 with fresh server/cache directories. It does not deploy an app or execute repository code.
 The workflow is additive; existing PolyCore/Polykrom CI remains unchanged.

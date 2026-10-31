@@ -8,10 +8,6 @@ on:
         description: Verify and use the R2 native compilation cache
         type: boolean
         default: true
-      command:
-        description: Optional trusted main-branch build command; empty runs only the probes
-        type: string
-        default: ''
   workflow_call:
     inputs:
       cache:
