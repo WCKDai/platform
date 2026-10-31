@@ -263,7 +263,7 @@ jobs:
         run: |
           set -euo pipefail
           echo "panel: $DOMAIN"
-          for i in $(seq 1 30); do
+          for _ in $(seq 1 30); do
             if curl -fsS --max-time 10 "$DOMAIN/healthz"; then exit 0; fi
             sleep 10
           done

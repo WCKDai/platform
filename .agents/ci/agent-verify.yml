@@ -1,0 +1,56 @@
+name: agent-verify
+
+# Standalone quality gate. Repositories that already have CI should add the
+# "Verify" step after their toolchain setup instead of replacing working CI.
+# Actions are pinned to commit SHAs; update them deliberately.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agent-verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+
+      - name: Install scanners (pinned)
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check semgrep==1.182.0
+          go install github.com/zricethezav/gitleaks/v8@v8.30.1 # module path is legacy; binary is gitleaks
+          go install github.com/google/osv-scanner/v2/cmd/osv-scanner@v2.7.0
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      # Add the repository's language toolchain here (for example
+      # dtolnay/rust-toolchain, actions/setup-node, or swift on a macOS runner).
+      # The gate runs the commands in .agents/engineering.json, so the toolchain
+      # must match what those commands need.
+
+      - name: Verify
+        run: ./.agents/bin/eng verify --profile full --ci
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: eng-evidence
+          path: .agents/evidence/
+          if-no-files-found: warn
+          retention-days: 14
