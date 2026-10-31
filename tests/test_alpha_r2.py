@@ -5,6 +5,7 @@ from pathlib import Path
 import re
 import textwrap
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = (ROOT / '.github/workflows/alpha-r2.yml').read_text()
@@ -26,7 +27,7 @@ class AlphaPolicyTests(unittest.TestCase):
         self.assertIn("github.repository_owner == 'WCKDai' && github.ref == 'refs/heads/main'", WORKFLOW)
         self.assertIn('fromJSON(\'["push","schedule","workflow_dispatch"]\')', WORKFLOW)
         self.assertNotIn('pull_request_target', WORKFLOW)
-        self.assertNotRegex(WORKFLOW, r'^  pull_request:', 'PRs must not request alpha')
+        self.assertNotRegex(WORKFLOW, re.compile(r'^\s*pull_request:', re.MULTILINE), 'PRs must not request alpha')
         self.assertIn('group: trusted', WORKFLOW)
         self.assertIn('labels: [self-hosted, linux, x64, rust-16, trusted]', WORKFLOW)
 
@@ -37,7 +38,9 @@ class AlphaPolicyTests(unittest.TestCase):
             self.assertRegex(action, r'@[0-9a-f]{40}$')
         self.assertNotRegex(WORKFLOW, r'contents:\s*write')
         self.assertNotIn('secrets: inherit', WORKFLOW)
-        self.assertNotIn('${{ inputs.command }}', WORKFLOW.split('run: |')[-1])
+        build_step = WORKFLOW.split('- name: Run the trusted caller build', 1)[1].split('- name: Stop only', 1)[0]
+        self.assertIn('BUILD_COMMAND: ${{ inputs.command }}', build_step)
+        self.assertNotIn('${{', build_step.split('run: |', 1)[1])
 
     def test_cache_is_fail_closed_and_job_is_isolated(self):
         self.assertIn('[ "$R2_CONFIGURED" = true ]', WORKFLOW)
@@ -48,6 +51,26 @@ class AlphaPolicyTests(unittest.TestCase):
         self.assertIn("for phase in ('write', 'read')", PROBE)
         self.assertIn("env.SCCACHE_SERVER_PORT != ''", WORKFLOW)
         self.assertIn('sha256sum --check --status', WORKFLOW)
+
+
+class AssertionCoverageTests(unittest.TestCase):
+    def test_added_pull_request_trigger_is_rejected(self):
+        changed = WORKFLOW.replace('  workflow_dispatch:\n', '  pull_request:\n  workflow_dispatch:\n', 1)
+        self.assertNotEqual(changed, WORKFLOW)
+        with mock.patch.dict(globals(), WORKFLOW=changed), self.assertRaises(AssertionError):
+            AlphaPolicyTests().test_only_trusted_main_events_reach_alpha()
+
+    def test_build_script_interpolation_is_rejected(self):
+        changed = WORKFLOW.replace('-c "$BUILD_COMMAND"', '-c "${{ inputs.command }}"', 1)
+        self.assertNotEqual(changed, WORKFLOW)
+        with mock.patch.dict(globals(), WORKFLOW=changed), self.assertRaises(AssertionError):
+            AlphaPolicyTests().test_no_checkout_of_arbitrary_refs_or_persistent_credentials()
+
+    def test_missing_build_command_environment_is_rejected(self):
+        changed = WORKFLOW.replace('BUILD_COMMAND: ${{ inputs.command }}', 'BUILD_COMMAND: fixed', 1)
+        self.assertNotEqual(changed, WORKFLOW)
+        with mock.patch.dict(globals(), WORKFLOW=changed), self.assertRaises(AssertionError):
+            AlphaPolicyTests().test_no_checkout_of_arbitrary_refs_or_persistent_credentials()
 
 
 class CacheEvidenceTests(unittest.TestCase):
