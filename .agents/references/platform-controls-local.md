@@ -13,8 +13,16 @@ also contains the corrected defects. No sibling worktree or uncommitted source w
   is intentionally ineligible for release; rerun verification on the clean commit.
 - The sample checkout does not persist its token. Analysis stays read-only, and RED demonstrations
   must retain the new test in the pre-fix checkout.
+- The sample installer provisions the same pinned zizmor as quality CI. No Gitleaks path exemption
+  is justified for nonexistent fixtures, so those exemptions are removed rather than expanded.
+- Secret scans use a strict index inventory, separate from heuristic source discovery, and include
+  tracked build/target/node_modules-like paths. Only evidence and isolated worktrees are excluded
+  as trust boundaries. Gitlinks and tracked symlink targets are never traversed. Missing files,
+  unexpected file types, symlink parents, index errors and failed copies fail closed rather than
+  silently reducing scan coverage. Gitleaks still checks current tracked worktree bytes; the staged
+  guard separately checks index blobs. Untracked/generated files are not added to scan coverage.
 
 Run `python3 -B -m unittest discover -s tests -p test_controls.py -v`. Both verification profiles
-include these tests; Semgrep must be installed for their isolated positive/negative rule fixtures.
+include these tests; Semgrep and Gitleaks must be installed for isolated positive/negative fixtures.
 Fixtures use disposable repositories and deliberately fake, assembled credential shapes only.
 Rollback is a reviewed revert of the hardening commit; do not restore known bypasses silently.

@@ -127,6 +127,136 @@ class ControlsTests(unittest.TestCase):
         with mock.patch.object(eng.subprocess, "run", side_effect=OSError("fixture blob error")):
             self.assertNotEqual(self.guard(), 0)
 
+    def test_template_provisions_required_pinned_zizmor(self):
+        import re
+        template = (ROOT / ".agents/ci/agent-verify.yml").read_text()
+        quality = (ROOT / ".github/workflows/quality.yml").read_text()
+        pin = re.search(r"\bzizmor==[0-9.]+", quality).group(0)
+        self.assertIn(pin, template)
+        self.assertRegex(template, r"python -m pip install[^\n]*" + re.escape(pin))
+
+    def guard_all(self):
+        with contextlib.redirect_stdout(io.StringIO()):
+            return eng.cmd_guard(SimpleNamespace(root=self.root, all=True))
+
+    def add_scan_fixture(self, name, content="tracked fixture\n"):
+        path = self.root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
+        self.git("add", "--", name)
+        return path
+
+    def test_all_guard_scans_tracked_build_like_paths(self):
+        for name in ("docs/build/env.txt", "target/config.txt", "dist/config.js",
+                     "node_modules/config.txt", "venv/config.txt", ".idea/config.txt", "Pods/config.txt"):
+            with self.subTest(path=name):
+                path = self.add_scan_fixture(name, "ghp_" + "0" * 36)
+                self.assertEqual(self.guard_all(), 1)
+                path.write_text("clean\n")
+
+    def test_scan_tree_includes_tracked_build_like_paths_only(self):
+        names = ("docs/build/env.txt", "target/config.txt", "dist/config.js", "node_modules/config.txt")
+        for name in names:
+            self.add_scan_fixture(name)
+        (self.root / "untracked.txt").write_text("untracked\n")
+        tree = Path(self.temp.name) / "scan-tree"
+        eng.make_tracked_tree(self.root, tree)
+        for name in names:
+            self.assertTrue((tree / name).is_file(), name)
+        self.assertFalse((tree / "untracked.txt").exists())
+        self.assertNotIn("docs/build/env.txt", eng.tracked_files(self.root))
+
+    def test_secret_scan_enumeration_failure_is_not_a_clean_guard(self):
+        original = eng.git
+
+        def fail_listing(root, *args, **kwargs):
+            if "ls-files" in args:
+                raise RuntimeError("fixture index listing failure")
+            return original(root, *args, **kwargs)
+
+        with mock.patch.object(eng, "git", side_effect=fail_listing):
+            self.assertNotEqual(self.guard_all(), 0)
+
+    def test_scan_tree_skips_symlink_targets_and_submodules(self):
+        outside = Path(self.temp.name) / "outside.txt"
+        outside.write_text("external fixture; must not be copied\n")
+        (self.root / "link.txt").symlink_to(outside)
+        self.git("add", "link.txt")
+        head = self.git("rev-parse", "HEAD")
+        self.git("update-index", "--add", "--cacheinfo", f"160000,{head},module")
+        (self.root / "module").mkdir()
+        (self.root / "module/foreign.txt").write_text("foreign fixture\n")
+        tree = Path(self.temp.name) / "scan-tree"
+        eng.make_tracked_tree(self.root, tree)
+        self.assertFalse((tree / "link.txt").exists())
+        self.assertFalse((tree / "link.txt").is_symlink())
+        self.assertFalse((tree / "module").exists())
+
+    def test_regular_index_file_replaced_by_symlink_fails_closed(self):
+        path = self.add_scan_fixture("ordinary.txt")
+        path.unlink()
+        outside = Path(self.temp.name) / "outside.txt"
+        outside.write_text("external fixture must not be read\n")
+        path.symlink_to(outside)
+        self.assertNotEqual(self.guard_all(), 0)
+        with self.assertRaises((OSError, RuntimeError, ValueError)):
+            eng.make_tracked_tree(self.root, Path(self.temp.name) / "scan-tree")
+
+    def test_symlink_parent_fails_closed(self):
+        path = self.add_scan_fixture("folder/ordinary.txt")
+        moved = Path(self.temp.name) / "outside"
+        path.parent.rename(moved)
+        (self.root / "folder").symlink_to(moved, target_is_directory=True)
+        self.assertNotEqual(self.guard_all(), 0)
+        with self.assertRaises((OSError, RuntimeError, ValueError)):
+            eng.make_tracked_tree(self.root, Path(self.temp.name) / "scan-tree")
+
+    def test_missing_tracked_worktree_file_fails_closed(self):
+        self.add_scan_fixture("ordinary.txt").unlink()
+        self.assertNotEqual(self.guard_all(), 0)
+        with self.assertRaises((OSError, RuntimeError, ValueError)):
+            eng.make_tracked_tree(self.root, Path(self.temp.name) / "scan-tree")
+
+    def test_scan_copy_failure_is_error_not_pass(self):
+        out = self.root / ".agents/evidence/scan"
+        out.mkdir(parents=True)
+        with mock.patch.object(eng.os, "link", side_effect=OSError("fixture link error")), \
+                mock.patch.object(eng.shutil, "copy2", side_effect=OSError("fixture copy error")), \
+                mock.patch.object(eng.shutil, "copyfileobj", side_effect=OSError("fixture copy error")):
+            result = eng.run_scanner(self.root, {}, "gitleaks", out)
+        self.assertEqual(result["status"], "error")
+
+    def test_scan_source_read_failure_is_error_not_pass(self):
+        out = self.root / ".agents/evidence/scan"
+        out.mkdir(parents=True)
+        original_open = eng.os.open
+
+        def refuse_source(path, *args, **kwargs):
+            if path == self.root / "notes.md":
+                raise PermissionError("fixture source read denied")
+            return original_open(path, *args, **kwargs)
+
+        with mock.patch.object(eng.os, "open", side_effect=refuse_source):
+            result = eng.run_scanner(self.root, {}, "gitleaks", out)
+        self.assertEqual(result["status"], "error")
+
+    def test_gitleaks_catches_formerly_exempt_paths(self):
+        names = ("tests/fixtures/config.txt", "tests/test_eng.py", "evals/fixtures/config.txt",
+                 "evals/control-fixture/config.txt", "evals/agent/fixture/config.txt", "docs/build/env.txt")
+        # Never issued: deliberately fake, assembled high-entropy detector input.
+        fake = "ghp_" + "FAKEq7R3m9T2v6Z4p8N1c5K0s2D9x7H3b6L8"
+        for name in (*names, "ordinary-credential-fixture.txt"):
+            self.add_scan_fixture(name, fake)
+        out = self.root / ".agents/evidence/scan"
+        out.mkdir(parents=True)
+        cfg = {"security": {"gitleaks_config": str(ROOT / ".agents/config/gitleaks.toml")}}
+        result = eng.run_scanner(self.root, cfg, "gitleaks", out)
+        self.assertEqual(result["status"], "findings")
+        data = json.loads((out / "gitleaks.json").read_text())
+        self.assertTrue(any(item["File"].endswith("ordinary-credential-fixture.txt") for item in data))
+        for name in names:
+            self.assertTrue(any(item["File"].endswith(name) for item in data), name)
+
     def scanner(self, code=0, raises=False):
         out = self.root / ".agents/evidence/scan"
         out.mkdir(parents=True)
@@ -148,8 +278,8 @@ class ControlsTests(unittest.TestCase):
                 mock.patch.object(eng, "tool_version", return_value="fixture"), \
                 mock.patch.object(eng, "sh", side_effect=run):
             if raises:
-                with self.assertRaises(RuntimeError):
-                    eng.run_scanner(self.root, {}, "gitleaks", out)
+                result = eng.run_scanner(self.root, {}, "gitleaks", out)
+                self.assertEqual(result["status"], "error")
             else:
                 result = eng.run_scanner(self.root, {}, "gitleaks", out)
                 self.assertEqual(result["status"], {0: "pass", 1: "findings", -9: "error"}[code])

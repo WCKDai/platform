@@ -4,13 +4,5 @@ title = "eng baseline"
 [extend]
 useDefault = true
 
-# Test fixtures deliberately contain fake credentials. They are never real.
-[[allowlists]]
-description = "eng control fixtures"
-paths = [
-  '''(^|/)tests/fixtures/.*''',
-  '''(^|/)tests/test_eng.py''',
-  '''(^|/)evals/fixtures/.*''',
-  '''(^|/)evals/control-fixture/.*''',
-  '''(^|/)evals/agent/fixture/.*''',
-]
+# No path exemptions are justified here. Dangerous fixtures are generated only
+# in isolated temporary repositories by tests/test_controls.py.

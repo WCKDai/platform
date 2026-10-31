@@ -17,6 +17,7 @@ import platform
 import re
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
@@ -217,6 +218,45 @@ def skipped_path(path):
     if ".agents" in parts and "evidence" in parts:
         return True
     return any(part in SKIP_PARTS for part in parts)
+
+
+def tracked_scan_entries(root):
+    """Strict index inventory for secrets; heuristic source-directory skips do not apply."""
+    res = git(root, "ls-files", "--stage", "-z", check=True)
+    entries = []
+    for entry in res.out.split("\0"):
+        if not entry:
+            continue
+        metadata, path = entry.split("\t", 1)
+        mode, _, stage = metadata.split()
+        parts = Path(path).parts
+        if Path(path).is_absolute() or ".." in parts:
+            raise ValueError("invalid index path")
+        # Evidence and other agents' isolated worktrees are separate trust boundaries.
+        if ".worktrees" in parts or any(parts[i:i + 2] == (".agents", "evidence")
+                                        for i in range(len(parts) - 1)):
+            continue
+        if stage != "0" or mode not in ("100644", "100755", "120000", "160000"):
+            raise ValueError("unmerged or unsupported index entry")
+        entries.append((path, mode))
+    return entries
+
+
+def worktree_scan_file(root, path, index_mode):
+    """Never traverse symlink parents, tracked symlink targets, or gitlink contents."""
+    if index_mode == "160000":
+        return False
+    parent = Path(root)
+    for part in Path(path).relative_to(root).parts[:-1]:
+        parent /= part
+        if parent.is_symlink():
+            raise ValueError("tracked path has a symlink parent")
+    mode = Path(path).lstat().st_mode
+    if index_mode == "120000" and stat.S_ISLNK(mode):
+        return False
+    if index_mode == "120000" or not stat.S_ISREG(mode):
+        raise ValueError("tracked file type differs from the index")
+    return True
 
 
 def load_config(root):
@@ -557,7 +597,7 @@ def allowed(path, patterns):
     return any(fnmatch.fnmatch(path, p) or (p.endswith("/") and path.startswith(p)) for p in patterns)
 
 
-def scan_file(root, path, allow, staged=False):
+def scan_file(root, path, allow, staged=False, index_mode=None):
     findings = []
     # Index paths are lexical: resolving a worktree symlink would inspect another file.
     relpath = str(Path(path).relative_to(root))
@@ -583,7 +623,10 @@ def scan_file(root, path, allow, staged=False):
                 raise ValueError("unsupported index mode")
             size = int(git(root, "cat-file", "-s", oid, check=True).out.strip())
         else:
-            if p.is_symlink() or not p.is_file():
+            if index_mode is not None:
+                if not worktree_scan_file(root, path, index_mode):
+                    return findings
+            elif p.is_symlink() or not p.is_file():
                 return findings
             size = p.stat().st_size
         if size > MAX_SCAN_BYTES:
@@ -620,7 +663,13 @@ def cmd_guard(args):
         print("eng guard: not a git repository", file=sys.stderr)
         return 2
     if args.all:
-        paths = [root / f for f in tracked_files(root)]
+        try:
+            entries = tracked_scan_entries(root)
+        except (OSError, RuntimeError, ValueError):
+            print("eng guard: cannot enumerate tracked scan paths", file=sys.stderr)
+            return 2
+        paths = [root / f for f, _ in entries]
+        modes = dict(entries)
     else:
         res = git(root, "diff", "--cached", "--name-only", "-z", "--diff-filter=ACMRTU")
         if not res.ok:
@@ -630,7 +679,8 @@ def cmd_guard(args):
     allow = load_allowlist(root)
     findings = []
     for path in paths:
-        findings += scan_file(root, path, allow, staged=not args.all)
+        findings += scan_file(root, path, allow, staged=not args.all,
+                              index_mode=modes[str(path.relative_to(root))] if args.all else None)
     if findings:
         print(f"eng guard: {len(findings)} finding(s)")
         for path, line, rule, message in findings:
@@ -897,24 +947,23 @@ def tool_version(name):
 
 
 def make_tracked_tree(root, dest):
-    """Hard-link tracked files into a scan tree, so generated/ignored trees are never scanned."""
+    """Copy every tracked regular worktree file; never hide build-like tracked paths."""
     dest = Path(dest)
-    if dest.exists():
-        shutil.rmtree(dest, ignore_errors=True)
-    dest.mkdir(parents=True, exist_ok=True)
-    for f in tracked_files(root):
+    dest.mkdir(parents=True, exist_ok=False)
+    for f, mode in tracked_scan_entries(root):
         src = Path(root) / f
-        if not src.is_file():
+        if not worktree_scan_file(root, src, mode):
             continue
         dst = dest / f
         dst.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            os.link(src, dst)
-        except OSError:
-            try:
-                shutil.copy2(src, dst)
-            except OSError:
-                continue
+        # Materialize bytes so an unreadable source cannot become a silently skipped
+        # hard link, and the scanner does not see later edits through shared inodes.
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+        with os.fdopen(os.open(src, flags), "rb") as source:
+            if not stat.S_ISREG(os.fstat(source.fileno()).st_mode):
+                raise ValueError("scan source is not a regular file")
+            with dst.open("xb") as target:
+                shutil.copyfileobj(source, target)
 
 
 def run_scanner(root, cfg, name, outdir):
@@ -946,6 +995,10 @@ def run_scanner(root, cfg, name, outdir):
             if cfg_path.exists():
                 args += ["--config", str(cfg_path)]
             res = sh(args, cwd=root, timeout=c.get("timeout", 600), env=env)
+        except (OSError, RuntimeError, ValueError):
+            result["status"] = "error"
+            result["reason"] = "cannot prepare or execute complete tracked-file scan"
+            return result
         finally:
             if temporary is not None:
                 temporary.cleanup()
