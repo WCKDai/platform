@@ -4,6 +4,7 @@ import contextlib
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -11,6 +12,11 @@ import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest import mock
+
+# Hooks export repository-local variables that override `git -C`. Remove them in
+# this test process before creating fixtures; never let fixture writes reach the caller.
+for variable in subprocess.check_output(["git", "rev-parse", "--local-env-vars"], text=True).splitlines():
+    os.environ.pop(variable, None)
 
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
@@ -47,6 +53,19 @@ class ControlsTests(unittest.TestCase):
         path.write_text(content)
         self.git("add", "fixture.txt")
         return path
+
+    def test_fixture_isolation_under_git_hook_environment(self):
+        head = self.git("rev-parse", "HEAD")
+        env = os.environ.copy()
+        env.update(GIT_DIR=str(self.root / ".git"), GIT_WORK_TREE=str(self.root),
+                   GIT_INDEX_FILE=str(self.root / ".git/index"))
+        result = subprocess.run([sys.executable, "-B", str(Path(__file__).resolve()),
+                                 "ControlsTests.test_guard_reads_index_not_clean_disk"],
+                                env=env, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(self.git("rev-parse", "HEAD"), head)
+        self.assertEqual(self.git("config", "user.name"), "Controls fixture")
+        self.assertEqual(self.git("status", "--porcelain"), "")
 
     def test_guard_reads_index_not_clean_disk(self):
         # Deliberately fake and assembled so no credential-like literal is committed.
