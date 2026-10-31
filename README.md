@@ -39,6 +39,9 @@ See [GitHub environments](docs/github-environments.md) for every variable and se
 - Tailscale clients and ACL: [Tailscale setup](docs/tailscale.md)
 - Runners: [runner policy](docs/runners.md)
 - Shared R2 sccache: [cache configuration](docs/cache.md)
+- Reusable trusted alpha builds: [shared workflow](.github/workflows/alpha-r2.yml) and
+  [caller setup](docs/runners.md#shared-trusted-builds). Current-repository access is selected,
+  not a wildcard; private repos on GitHub Free need repository-local R2 credentials.
 - PolyCore task policy: [task schema](https://github.com/WCKDai/polycore/blob/main/agent/task.schema.json)
 
 ## Architecture

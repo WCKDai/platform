@@ -1,0 +1,182 @@
+name: Alpha and R2
+
+# Only trusted main-branch callers may reach alpha. PRs keep using GitHub-hosted runners.
+on:
+  workflow_dispatch:
+    inputs:
+      cache:
+        description: Verify and use the R2 native compilation cache
+        type: boolean
+        default: true
+      command:
+        description: Optional trusted main-branch build command; empty runs only the probes
+        type: string
+        default: ''
+  workflow_call:
+    inputs:
+      cache:
+        type: boolean
+        default: true
+      command:
+        type: string
+        default: ''
+    secrets:
+      R2_ACCESS_KEY_ID:
+        required: false
+      R2_SECRET_ACCESS_KEY:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: >-
+      github.repository_owner == 'WCKDai' && github.ref == 'refs/heads/main' &&
+      contains(fromJSON('["push","schedule","workflow_dispatch"]'), github.event_name)
+    runs-on:
+      group: trusted
+      labels: [self-hosted, linux, x64, rust-16, trusted]
+    timeout-minutes: 60
+    env:
+      CACHE_REQUESTED: ${{ inputs.cache }}
+      R2_CONFIGURED: ${{ vars.R2_CONFIGURED }}
+      SCCACHE_BUCKET: ${{ vars.R2_BUCKET }}
+      SCCACHE_ENDPOINT: ${{ vars.R2_ENDPOINT }}
+      SCCACHE_REGION: ${{ vars.SCCACHE_REGION }}
+      SCCACHE_S3_USE_SSL: ${{ vars.SCCACHE_S3_USE_SSL }}
+      SCCACHE_S3_KEY_PREFIX: ${{ vars.SCCACHE_S3_KEY_PREFIX }}
+      AWS_ACCESS_KEY_ID: ${{ inputs.cache && secrets.R2_ACCESS_KEY_ID || '' }}
+      AWS_SECRET_ACCESS_KEY: ${{ inputs.cache && secrets.R2_SECRET_ACCESS_KEY || '' }}
+      AWS_EC2_METADATA_DISABLED: 'true'
+      RUSTC_WRAPPER: ''
+      CARGO_INCREMENTAL: '0'
+      CARGO_BUILD_JOBS: '4'
+      RUST_TEST_THREADS: '4'
+      RAYON_NUM_THREADS: '4'
+    steps:
+      - name: Verify alpha and cache configuration
+        env:
+          ACTUAL_RUNNER: ${{ runner.name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ "$ACTUAL_RUNNER" = alpha ] || { echo '::error::Expected alpha'; exit 1; }
+          [ "$(uname -s)" = Linux ] && [ "$(uname -m)" = x86_64 ]
+          echo 'Alpha Linux/x64 readiness: PASS'
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          if [ "$CACHE_REQUESTED" != true ]; then
+            echo '::notice::Native compilation cache not requested; R2 is not verified by this run'
+            exit 0
+          fi
+          for name in R2_CONFIGURED SCCACHE_BUCKET SCCACHE_ENDPOINT SCCACHE_REGION SCCACHE_S3_USE_SSL SCCACHE_S3_KEY_PREFIX AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; do
+            [ -n "${!name:-}" ] || { echo "::error::Missing configuration: $name"; exit 2; }
+          done
+          [ "$R2_CONFIGURED" = true ] || { echo '::error::R2_CONFIGURED is not true'; exit 2; }
+          [ "$SCCACHE_S3_USE_SSL" = true ] || { echo '::error::R2 TLS must be enabled'; exit 2; }
+          case "$SCCACHE_ENDPOINT" in https://*.r2.cloudflarestorage.com) ;; *) echo '::error::Expected an HTTPS R2 endpoint'; exit 2;; esac
+
+      - name: Install checksum-pinned sccache in the job temp directory
+        if: inputs.cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          tools="$(mktemp -d "$RUNNER_TEMP/sccache-tools.XXXXXX")"
+          archive=sccache-v0.19.0-x86_64-unknown-linux-musl.tar.gz
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            "https://github.com/mozilla/sccache/releases/download/v0.19.0/$archive" -o "$tools/$archive"
+          printf '%s  %s\n' aa73c7270c997894038c0d8f0d297865f57569e1687883322bc431713d4bb9dd "$tools/$archive" | sha256sum --check --status
+          tar -xzf "$tools/$archive" -C "$tools"
+          binary="$tools/sccache-v0.19.0-x86_64-unknown-linux-musl/sccache"
+          [ -x "$binary" ]
+          dirname "$binary" >> "$GITHUB_PATH"
+          echo "RUSTC_WRAPPER=$binary" >> "$GITHUB_ENV"
+
+      - name: Verify an R2 write and a cache hit from a fresh server
+        if: inputs.cache
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          # BEGIN CACHE PROBE
+          import json, os, pathlib, socket, subprocess, tempfile
+
+          def count(stats, name):
+              value = stats[name]
+              if isinstance(value, dict):
+                  return sum(value['counts'].values())
+              return value
+
+          def verify_stats(data, phase):
+              if 's3' not in data['cache_location'].lower():
+                  raise RuntimeError('Expected the remote S3/R2 backend, not a local fallback')
+              stats = data['stats']
+              for key in ('cache_write_errors', 'cache_read_errors'):
+                  if count(stats, key) != 0:
+                      raise RuntimeError('Remote cache error: ' + key)
+              key = 'cache_writes' if phase == 'write' else 'cache_hits'
+              if count(stats, key) < 1:
+                  raise RuntimeError('No verified remote ' + key)
+
+          root = pathlib.Path(tempfile.mkdtemp(prefix='r2-probe-', dir=os.environ['RUNNER_TEMP']))
+          source = root / 'probe.c'
+          nonce = os.environ['GITHUB_RUN_ID'] + '_' + os.environ['GITHUB_RUN_ATTEMPT']
+          source.write_text('const char *cache_probe = "' + nonce + '";\nint probe(void) { return 42; }\n')
+          env = os.environ.copy()
+          env.pop('RUSTC_WRAPPER', None)
+          with socket.socket() as sock:
+              sock.bind(('127.0.0.1', 0))
+              env['SCCACHE_SERVER_PORT'] = str(sock.getsockname()[1])
+
+          def run(*args):
+              result = subprocess.run(args, env=env, text=True, capture_output=True, timeout=120)
+              if result.returncode:
+                  raise RuntimeError('Cache probe command failed (output withheld): ' + args[0])
+              return result.stdout
+
+          try:
+              for phase in ('write', 'read'):
+                  env['SCCACHE_DIR'] = str(root / phase)
+                  run('sccache', '--start-server')
+                  run('sccache', 'gcc', '-c', str(source), '-o', str(root / (phase + '.o')))
+                  data = json.loads(run('sccache', '--show-stats', '--stats-format', 'json'))
+                  verify_stats(data, phase)
+                  run('sccache', '--stop-server')
+                  print('R2 remote cache ' + phase + ': PASS')
+          finally:
+              subprocess.run(['sccache', '--stop-server'], env=env, capture_output=True, timeout=30)
+          with open(os.environ['GITHUB_ENV'], 'a') as output:
+              output.write('SCCACHE_SERVER_PORT=' + env['SCCACHE_SERVER_PORT'] + '\n')
+              output.write('SCCACHE_DIR=' + str(root / 'build') + '\n')
+          # END CACHE PROBE
+          PY
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: inputs.command != ''
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Run the trusted caller build
+        if: inputs.command != ''
+        env:
+          BUILD_COMMAND: ${{ inputs.command }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # This is deliberately executable input from an approved main-branch workflow, never a PR.
+          [ "$(df -Pk . | awk 'NR==2 {print $4}')" -ge 10485760 ] || { echo '::error::Less than 10 GiB free'; exit 1; }
+          awk '{ if ($1 > 24) exit 1 }' /proc/loadavg || { echo '::error::Alpha load is above 24; try after the active build finishes'; exit 1; }
+          nice -n 10 bash --noprofile --norc -eo pipefail -c "$BUILD_COMMAND"
+
+      - name: Stop only this job's cache server
+        if: always() && inputs.cache && env.SCCACHE_SERVER_PORT != ''
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os, socket, subprocess
+          with socket.socket() as sock:
+              sock.settimeout(2)
+              active = sock.connect_ex(('127.0.0.1', int(os.environ['SCCACHE_SERVER_PORT']))) == 0
+          if active:
+              subprocess.run(['sccache', '--stop-server'], capture_output=True, check=True, timeout=30)
+          PY

@@ -1,0 +1,75 @@
+"""Policy and remote-cache evidence contracts for the shared trusted workflow."""
+import ast
+import copy
+from pathlib import Path
+import re
+import textwrap
+import unittest
+
+ROOT = Path(__file__).resolve().parents[1]
+WORKFLOW = (ROOT / '.github/workflows/alpha-r2.yml').read_text()
+PROBE = textwrap.dedent(WORKFLOW.split('# BEGIN CACHE PROBE\n')[1].split('# END CACHE PROBE')[0])
+tree = ast.parse(PROBE)
+helpers = ast.Module(body=[node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name in ('count', 'verify_stats')], type_ignores=[])
+scope = {}
+exec(compile(helpers, '<cache-probe-helpers>', 'exec'), scope)
+
+
+class AlphaPolicyTests(unittest.TestCase):
+    def test_only_trusted_main_events_reach_alpha(self):
+        self.assertIn("github.repository_owner == 'WCKDai' && github.ref == 'refs/heads/main'", WORKFLOW)
+        self.assertIn('fromJSON(\'["push","schedule","workflow_dispatch"]\')', WORKFLOW)
+        self.assertNotIn('pull_request_target', WORKFLOW)
+        self.assertNotRegex(WORKFLOW, r'^  pull_request:', 'PRs must not request alpha')
+        self.assertIn('group: trusted', WORKFLOW)
+        self.assertIn('labels: [self-hosted, linux, x64, rust-16, trusted]', WORKFLOW)
+
+    def test_no_checkout_of_arbitrary_refs_or_persistent_credentials(self):
+        self.assertIn('ref: ${{ github.sha }}', WORKFLOW)
+        self.assertIn('persist-credentials: false', WORKFLOW)
+        for action in re.findall(r'uses:\s*(\S+)', WORKFLOW):
+            self.assertRegex(action, r'@[0-9a-f]{40}$')
+        self.assertNotRegex(WORKFLOW, r'contents:\s*write')
+        self.assertNotIn('secrets: inherit', WORKFLOW)
+        self.assertNotIn('${{ inputs.command }}', WORKFLOW.split('run: |')[-1])
+
+    def test_cache_is_fail_closed_and_job_is_isolated(self):
+        self.assertIn('[ "$R2_CONFIGURED" = true ]', WORKFLOW)
+        self.assertIn('[ "$SCCACHE_S3_USE_SSL" = true ]', WORKFLOW)
+        self.assertIn('AWS_EC2_METADATA_DISABLED', WORKFLOW)
+        self.assertIn("env['SCCACHE_SERVER_PORT']", PROBE)
+        self.assertIn("str(root / phase)", PROBE)
+        self.assertIn("for phase in ('write', 'read')", PROBE)
+        self.assertIn("env.SCCACHE_SERVER_PORT != ''", WORKFLOW)
+        self.assertIn('sha256sum --check --status', WORKFLOW)
+
+
+class CacheEvidenceTests(unittest.TestCase):
+    def setUp(self):
+        self.data = {'cache_location': 'S3', 'stats': {
+            'cache_write_errors': 0, 'cache_read_errors': {'counts': {'C/C++': 0}},
+            'cache_writes': 1, 'cache_hits': {'counts': {'C/C++': 1}},
+        }}
+
+    def test_remote_write_and_hit_are_accepted(self):
+        for phase in ('write', 'read'):
+            scope['verify_stats'](self.data, phase)
+
+    def test_local_fallback_is_not_remote_proof(self):
+        self.data['cache_location'] = '/local/cache'
+        with self.assertRaises(RuntimeError):
+            scope['verify_stats'](self.data, 'read')
+
+    def test_missing_or_failed_cache_proof_never_passes(self):
+        for key in ('cache_writes', 'cache_hits', 'cache_read_errors', 'cache_write_errors'):
+            data = copy.deepcopy(self.data)
+            data['stats'][key] = 0 if key in ('cache_hits', 'cache_writes') else 1
+            with self.subTest(key=key), self.assertRaises(RuntimeError):
+                scope['verify_stats'](data, 'write' if key == 'cache_writes' else 'read')
+        del self.data['stats']['cache_read_errors']
+        with self.assertRaises(KeyError):
+            scope['verify_stats'](self.data, 'read')
+
+
+if __name__ == '__main__':
+    unittest.main()
