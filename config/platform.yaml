@@ -64,6 +64,7 @@ worker:
 
 cache:
   provider: cloudflare-r2
+  repository_access: selected-participating-repositories
   bucket_variable: R2_BUCKET
   endpoint_variable: R2_ENDPOINT
   region: auto
@@ -93,6 +94,11 @@ ci:
   macos: existing-apple-silicon
   gpu: nightly-only
   required_runner_label: rust-16
+  shared_workflow: .github/workflows/alpha-r2.yml
+  repository_access: selected-current-repositories
+  future_repositories: explicit-approval-required
+  cache_prefix_default: repository-name
+  private_cache_credentials: repository-secrets-on-github-free
 
 # Keys the workflows read directly. Declared here so the audit can tell an unused secret from
 # one that only exists at runtime; the names live in GitHub environments, never the values.

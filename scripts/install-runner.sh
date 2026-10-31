@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # Install one persistent GitHub Actions runner for WCKDai on Debian/Ubuntu x86_64.
 #
-#   sudo RUNNER_TOKEN=... ./scripts/install-runner.sh
+#   sudo RUNNER_NAME=alpha RUNNER_TOKEN=... ./scripts/install-runner.sh
 #
 # RUNNER_TOKEN is a one-hour, single-use registration token from
 # https://github.com/organizations/WCKDai/settings/actions/runners/new
 # It is not a PAT and nothing long-lived is stored on the host.
 #
-# The runner joins the `trusted` group, which is limited to WCKDai/polycore and
-# WCKDai/polykrom. Do not register it before that group is restricted to the
-# trusted workflow on main; see docs/runners.md.
+# The runner joins the `trusted` group, selected for the explicitly approved
+# current repositories. Do not register it before that group is restricted to
+# reviewed trusted workflows at their approved refs; see docs/runners.md.
 set -euo pipefail
 
 ORG_URL="${ORG_URL:-https://github.com/WCKDai}"

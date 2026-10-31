@@ -1,0 +1,4 @@
+# Exact custom labels observed on alpha. Labels are not an authorization boundary;
+# repository selection and the trusted runner group's workflow restrictions remain required.
+self-hosted-runner:
+  labels: [rust-16, trusted]
