@@ -1,0 +1,73 @@
+{
+  "schema": "eng-config/v1",
+  "project": "platform",
+  "commands": {
+    "fast": [
+      {
+        "name": "controls-tests",
+        "run": "python3 -B -m unittest discover -s tests -p test_controls.py -v",
+        "timeout": 120
+      },
+      {
+        "name": "action-pins",
+        "run": "./.agents/bin/eng audit-actions",
+        "timeout": 120
+      },
+      {
+        "name": "actionlint",
+        "run": "actionlint .github/workflows/*.yml",
+        "timeout": 300
+      },
+      {
+        "name": "zizmor",
+        "run": "zizmor --format plain --no-progress .github/workflows",
+        "timeout": 300
+      }
+    ],
+    "full": [
+      {
+        "name": "controls-tests",
+        "run": "python3 -B -m unittest discover -s tests -p test_controls.py -v",
+        "timeout": 120
+      },
+      {
+        "name": "action-pins",
+        "run": "./.agents/bin/eng audit-actions",
+        "timeout": 120
+      },
+      {
+        "name": "actionlint",
+        "run": "actionlint .github/workflows/*.yml",
+        "timeout": 300
+      },
+      {
+        "name": "zizmor",
+        "run": "zizmor --format plain --no-progress .github/workflows",
+        "timeout": 300
+      }
+    ]
+  },
+  "security": {
+    "required": [
+      "gitleaks",
+      "semgrep"
+    ],
+    "optional": [
+      "actionlint"
+    ],
+    "gitleaks_config": ".agents/config/gitleaks.toml",
+    "semgrep_config": ".agents/config/semgrep.yml",
+    "gitleaks_history": false,
+    "timeout": 300
+  },
+  "budgets": {
+    "fast_seconds": 120,
+    "full_seconds": 600
+  },
+  "parallel": {
+    "max_worktrees": 4
+  },
+  "impact": {
+    "base": "origin/main"
+  }
+}

@@ -1,0 +1,8 @@
+# gitleaks configuration for the eng baseline. Extends the maintained default
+# ruleset; allowlists are path-scoped and must be justified in review.
+title = "eng baseline"
+[extend]
+useDefault = true
+
+# No path exemptions are justified here. Dangerous fixtures are generated only
+# in isolated temporary repositories by tests/test_controls.py.

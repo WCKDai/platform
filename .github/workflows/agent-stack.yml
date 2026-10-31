@@ -32,8 +32,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
       - name: Syntax check
@@ -66,16 +68,20 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
       - name: Build the agent, panel and gateway images
         working-directory: services/agent
         env:
           OWNER: ${{ github.repository_owner }}
+          ACTOR: ${{ github.actor }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           owner="$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')"
           scripts/fetch-linux-binaries.sh v0.0.27 x86_64
-          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
           docker build -t "ghcr.io/$owner/wckd-autobot:${{ github.sha }}" -t "ghcr.io/$owner/wckd-autobot:latest" images/autobot
           docker build -t "ghcr.io/$owner/wckd-agent-panel:${{ github.sha }}" -t "ghcr.io/$owner/wckd-agent-panel:latest" panel
           docker build -t "ghcr.io/$owner/wckd-invincible-gateway:${{ github.sha }}" -t "ghcr.io/$owner/wckd-invincible-gateway:latest" images/gateway
