@@ -14,6 +14,11 @@ also contains the corrected defects. No sibling worktree or uncommitted source w
 - Full-profile `--skip-security` records a blocked verdict and explicit unverified reason; it cannot
   authorize a release. The fast profile keeps its existing command-only verification contract.
 - Action-pin auditing covers active workflows and installable YAML templates under `.agents/ci`.
+- Its YAML inspection now explicitly requires PyYAML 6.0.3 (MIT, pinned in both installers). This
+  measured parser requirement replaces proven regex omissions without changing other commands'
+  standard-library startup. Representation-node inspection does not construct objects; ambiguous,
+  unsupported or unreadable input and a missing parser return error/exit 2, not a clean audit.
+  Quoted/escaped keys, multiline/flow values and shell-string separation have regression fixtures.
 - The sample checkout does not persist its token. Analysis stays read-only, and RED demonstrations
   must retain the new test in the pre-fix checkout.
 - The sample installer provisions the same pinned zizmor as quality CI. No Gitleaks path exemption

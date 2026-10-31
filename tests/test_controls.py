@@ -150,6 +150,126 @@ class ControlsTests(unittest.TestCase):
         self.assertEqual(data["checked"], 2)
         self.assertEqual(data["findings"], [])
 
+    def audit_template(self, source):
+        path = self.root / ".agents/ci/fixture.yml"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(source)
+        return eng.audit_actions_data(self.root)
+
+    def test_pin_audit_parses_quoted_escaped_and_multiline_uses(self):
+        cases = [
+            '- "uses": "owner/action@v1"',
+            "- 'uses': 'owner/action@v1'",
+            '- "u\\u0073es": "owner/action@v1"',
+            '- uses:\n    owner/action@v1',
+            '- uses: >-\n    owner/action@v1',
+            '- uses: "owner/action@\n    v1"',
+        ]
+        for source in cases:
+            with self.subTest(source=source):
+                data = self.audit_template(source + "\n")
+                self.assertEqual(data.get("errors", []), [])
+                self.assertEqual(data["checked"], 1)
+                self.assertEqual(len(data["findings"]), 1)
+
+    def test_pin_audit_parses_flow_mappings(self):
+        cases = [
+            'jobs: {build: {steps: [{uses: owner/action@v1}]}}',
+            "jobs: {build: {steps: [{'uses': 'owner/action@v1'}]}}",
+            'jobs: {build: {steps: [{\n  "uses": "owner/action@v1",\n}]}}',
+        ]
+        for source in cases:
+            with self.subTest(source=source):
+                data = self.audit_template(source + "\n")
+                self.assertEqual(data.get("errors", []), [])
+                self.assertEqual(data["checked"], 1)
+                self.assertEqual(len(data["findings"]), 1)
+
+    def test_pin_audit_preserves_pin_local_and_container_contracts(self):
+        refs = ["owner/action@" + "1" * 40, "./.github/actions/local",
+                "docker://image@sha256:" + "2" * 64]
+        for ref in refs:
+            for key in ("uses", '"uses"', "'uses'"):
+                for value in (ref, json.dumps(ref), "'" + ref + "'"):
+                    with self.subTest(key=key, value=value):
+                        data = self.audit_template("- " + key + ": " + value + "\n")
+                        self.assertEqual(data.get("errors", []), [])
+                        self.assertEqual(data["checked"], 1)
+                        self.assertEqual(data["passed"], 1)
+                        self.assertEqual(data["findings"], [])
+
+    def test_pin_audit_does_not_scan_shell_strings_as_yaml(self):
+        source = ('jobs:\n  build:\n    steps:\n'
+                  '      - run: |\n          uses: attacker/action@v1\n'
+                  '          echo "uses: attacker/action@v1"\n'
+                  '      - run: \'echo "uses: attacker/action@v1"\'\n'
+                  '      - uses: owner/action@' + "1" * 40 + '\n')
+        data = self.audit_template(source)
+        self.assertEqual(data.get("errors", []), [])
+        self.assertEqual(data["checked"], 1)
+        self.assertEqual(data["findings"], [])
+
+    def test_pin_audit_rejects_ambiguous_or_uninspectable_yaml(self):
+        cases = [
+            'uses: owner/action@v1\n"uses": owner/action@' + "1" * 40,
+            '{uses: owner/action@v1, uses: owner/action@' + "1" * 40 + '}',
+            'x: &step {uses: owner/action@v1}\nsteps: [*step]',
+            'x: &step {uses: owner/action@v1}\njob: {<<: *step}',
+            'job: {<<: {uses: owner/action@v1}}',
+            'uses: !!str owner/action@v1',
+            '!!python/object/apply:os.system ["never execute"]',
+            'uses: [owner/action@v1]',
+            'jobs: [unterminated',
+            'uses: owner/action@v1\n---\nuses: owner/action@v2',
+            '',
+        ]
+        for source in cases:
+            with self.subTest(source=source):
+                data = self.audit_template(source + "\n")
+                self.assertTrue(data.get("errors"))
+                with contextlib.redirect_stdout(io.StringIO()) as output:
+                    code = eng.cmd_audit_actions(SimpleNamespace(root=str(self.root), json=True))
+                self.assertEqual(code, 2)
+                self.assertTrue(json.loads(output.getvalue())["errors"])
+
+    def test_pin_audit_missing_parser_is_blocked_not_clean(self):
+        self.audit_template("uses: owner/action@" + "1" * 40 + "\n")
+        with mock.patch.dict(sys.modules, {"yaml": None}):
+            data = eng.audit_actions_data(self.root)
+            self.assertTrue(data.get("errors"))
+            with contextlib.redirect_stdout(io.StringIO()) as output:
+                code = eng.cmd_audit_actions(SimpleNamespace(root=str(self.root), json=True))
+            self.assertEqual(code, 2)
+            self.assertTrue(json.loads(output.getvalue())["errors"])
+
+    def test_pin_audit_parser_dependency_is_explicitly_provisioned(self):
+        for name in (".agents/ci/agent-verify.yml", ".github/workflows/quality.yml"):
+            self.assertIn("PyYAML==6.0.3", (ROOT / name).read_text())
+
+    def test_pin_audit_bad_encoding_and_large_input_are_errors(self):
+        path = self.root / ".agents/ci/fixture.yml"
+        path.parent.mkdir(parents=True)
+        for raw in (b"\xff", b"#" + b"x" * 1_000_000):
+            with self.subTest(size=len(raw)):
+                path.write_bytes(raw)
+                self.assertTrue(eng.audit_actions_data(self.root).get("errors"))
+
+    def test_pin_audit_unreadable_or_symlinked_sources_are_errors(self):
+        self.audit_template("uses: owner/action@" + "1" * 40 + "\n")
+        path = self.root / ".agents/ci/fixture.yml"
+        with mock.patch.object(Path, "open", side_effect=PermissionError("fixture read denied")):
+            self.assertTrue(eng.audit_actions_data(self.root).get("errors"))
+        path.unlink()
+        path.symlink_to(Path(self.temp.name) / "never-read.yml")
+        with mock.patch.object(Path, "open", side_effect=AssertionError("must not follow symlink")) as opened:
+            self.assertTrue(eng.audit_actions_data(self.root).get("errors"))
+            opened.assert_not_called()
+
+    def test_pin_audit_unreadable_directory_is_error_not_empty_audit(self):
+        self.audit_template("uses: owner/action@" + "1" * 40 + "\n")
+        with mock.patch.object(Path, "iterdir", side_effect=PermissionError("fixture enumeration denied")):
+            self.assertTrue(eng.audit_actions_data(self.root).get("errors"))
+
     def fixture_verification_args(self, profile):
         path = self.root / ".agents/engineering.json"
         path.parent.mkdir(exist_ok=True)

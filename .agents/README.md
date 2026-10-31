@@ -3,15 +3,16 @@
 This directory is a self-contained copy of the `eng` kit. It gives an agent, a human and CI the
 same answers about what to run, what changed, what was verified, and what remains unverified.
 
-It is deliberately small: Python standard library plus git, with optional external scanners. It does
-not run a background service, require a database, or call a model.
+It is deliberately small: CLI startup and non-audit commands use Python's standard library plus
+git. `audit-actions` additionally requires pinned PyYAML for fail-closed YAML inspection; configured
+scanners are external tools. It does not run a background service, require a database, or call a model.
 
 ## Layout
 
 ```text
 .agents/
   bin/eng                 entry point
-  lib/eng.py              one dependency-free CLI
+  lib/eng.py              CLI; YAML parser required only for action auditing
   skills/                 ten task skills (SKILL.md)
   references/             lifecycle, evidence and trust policy
   config/                 semgrep, gitleaks and guard allowlist
@@ -53,6 +54,22 @@ the generic workflow. Do not duplicate the same rule in three places.
 | `eng doctor [--json]` | Tool and repository readiness. |
 
 `--json` works before or after the subcommand. `--root <path>` selects another repository.
+
+### Action-audit parser requirement and compatibility
+
+Install `PyYAML==6.0.3` in the same Python environment that runs `eng` (prefer a virtual environment).
+Both CI installers provision that exact version. The measured need is security-sensitive YAML:
+line matching missed quoted/escaped keys, multiline scalars and flow mappings, and misread shell
+strings as action references. Python's standard library has no YAML parser. Other CLI commands do
+not import this dependency.
+
+Auditing uses representation nodes with `BaseLoader`, never object constructors. Quoted/flow and
+multiline syntax is inspected. Duplicate/complex keys, merges, anchors, aliases, explicit tags,
+multiple documents, malformed/empty YAML, non-UTF-8 input, symlinked/unreadable sources and files
+over 1,000,000 bytes are intentionally rejected. Rewrite unsupported forms rather than bypassing
+the gate. Missing PyYAML also fails closed. This is a deliberate tightening: previously some of
+these forms were silently missed. Successful JSON/text and mutable-pin exit 1 remain unchanged;
+uninspectable input exits 2 and JSON adds a nonempty `errors` list, never a clean verdict.
 
 ## Skills
 
@@ -118,8 +135,9 @@ not publish, sign or deploy; human approval remains required. `--require-sbom` a
 
 ## Security
 
-- `gitleaks` scans tracked files only (a hard-linked tree), so build output and evidence logs are not
-  scanned. History scanning is opt-in (`security.gitleaks_history`).
+- `gitleaks` scans regular tracked worktree files in a private temporary copy, with its retained
+  2 MB per-file limit. Untracked build output/evidence is not covered; force-added tracked paths
+  are inventoried regardless of directory name. History scanning is opt-in (`security.gitleaks_history`).
 - `semgrep` uses the high-signal rules in `.agents/config/semgrep.yml`; add a test with every rule.
 - `osv-scanner` needs a lockfile; "no package sources" is reported as skipped, not pass.
 - `actionlint` checks `.github/workflows`. `zizmor` is used when installed.

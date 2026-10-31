@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """eng - portable engineering controls for repositories worked on by agents.
 
-The CLI is deliberately dependency-free (Python standard library, git, and optional
-external scanners). It produces a hash-chained evidence record for every verification
+The CLI uses the standard library and git; action auditing additionally requires
+PyYAML for fail-closed YAML inspection. It produces a hash-chained record for every verification
 run so a reviewer can tell what actually executed.
 """
 
@@ -864,16 +864,98 @@ def cmd_impact(args):
 # ----------------------------------------------------------------------------- actions
 
 
+class ActionInspectionError(Exception):
+    def __init__(self, reason, workflow="", line=0):
+        super().__init__(reason)
+        self.detail = {"workflow": workflow, "line": line, "reason": reason}
+
+
+def yaml_action_refs(text, workflow, yaml):
+    """Inspect representation nodes, never construct YAML objects or expand aliases."""
+    refs = []
+
+    def reject(reason, node=None):
+        line = node.start_mark.line + 1 if node is not None else 0
+        raise ActionInspectionError(reason, workflow, line)
+
+    def visit(node):
+        if isinstance(node, yaml.nodes.MappingNode):
+            keys = set()
+            for key, value in node.value:
+                if not isinstance(key, yaml.nodes.ScalarNode):
+                    reject("complex YAML keys are not supported", key)
+                if key.value in keys or key.value == "<<":
+                    reject("duplicate and merge keys are not supported", key)
+                keys.add(key.value)
+                if key.value == "uses":
+                    if not isinstance(value, yaml.nodes.ScalarNode):
+                        reject("uses must be a scalar reference", value)
+                    refs.append({"workflow": workflow, "line": key.start_mark.line + 1,
+                                 "ref": value.value.strip()})
+                visit(value)
+        elif isinstance(node, yaml.nodes.SequenceNode):
+            for value in node.value:
+                visit(value)
+
+    try:
+        # Reject ambiguous/graph features before composition; no object constructors run.
+        for event in yaml.parse(text, Loader=yaml.BaseLoader):
+            if (isinstance(event, yaml.events.AliasEvent) or getattr(event, "anchor", None)
+                    or getattr(event, "tag", None)):
+                reject("YAML anchors, aliases and explicit tags are not supported", event)
+        node = yaml.compose(text, Loader=yaml.BaseLoader)
+        if node is None:
+            reject("empty YAML cannot be inspected")
+        visit(node)
+    except (yaml.YAMLError, RecursionError) as exc:
+        mark = getattr(exc, "problem_mark", None)
+        raise ActionInspectionError("malformed or excessively nested YAML", workflow,
+                                    mark.line + 1 if mark is not None else 0) from None
+    return refs
+
+
 def action_refs(root):
     refs = []
-    paths = list((Path(root) / ".github" / "workflows").glob("*.y*ml"))
-    paths += list((Path(root) / ".agents" / "ci").glob("*.y*ml"))
+    paths = []
+    for directory in (Path(root) / ".github/workflows", Path(root) / ".agents/ci"):
+        parent = Path(root)
+        for part in directory.relative_to(root).parts:
+            parent /= part
+            if parent.is_symlink():
+                raise ActionInspectionError("workflow directories must not be symlinks")
+        try:
+            mode = directory.stat().st_mode
+        except FileNotFoundError:
+            continue
+        except OSError:
+            raise ActionInspectionError("cannot enumerate workflow directory",
+                                        str(directory.relative_to(root))) from None
+        if not stat.S_ISDIR(mode):
+            raise ActionInspectionError("workflow location must be a directory")
+        try:
+            paths += [path for path in directory.iterdir() if fnmatch.fnmatch(path.name, "*.y*ml")]
+        except OSError:
+            raise ActionInspectionError("cannot enumerate workflow directory",
+                                        str(directory.relative_to(root))) from None
+    if not paths:
+        return refs
+    try:
+        import yaml
+    except ImportError:
+        raise ActionInspectionError("action auditing requires PyYAML==6.0.3; install it in this Python environment") from None
     for path in sorted(paths):
-        text = read_text(path, limit=1_000_000)
-        for lineno, line in enumerate(text.splitlines(), 1):
-            match = re.match(r"\s*(?:-\s*)?uses:\s*[\"']?([^\"'\s#]+)", line)
-            if match:
-                refs.append({"workflow": str(path.relative_to(root)), "line": lineno, "ref": match.group(1)})
+        workflow = str(path.relative_to(root))
+        try:
+            if not stat.S_ISREG(path.lstat().st_mode):
+                raise ActionInspectionError("workflow must be a regular file", workflow)
+            with path.open("rb") as source:
+                raw = source.read(1_000_001)
+            if len(raw) > 1_000_000:
+                raise ActionInspectionError("workflow exceeds the 1 MB inspection limit", workflow)
+            text = raw.decode("utf-8-sig")
+        except (OSError, UnicodeError):
+            raise ActionInspectionError("cannot read workflow as UTF-8", workflow) from None
+        refs += yaml_action_refs(text, workflow, yaml)
     return refs
 
 
@@ -884,7 +966,12 @@ def audit_actions_data(root):
         allowed = [line.strip() for line in allow_path.read_text(encoding="utf-8").splitlines()
                    if line.strip() and not line.strip().startswith("#")]
     findings, passed, exceptions = [], [], []
-    for item in action_refs(root):
+    try:
+        refs = action_refs(root)
+    except ActionInspectionError as exc:
+        return {"schema": "eng-actions/v1", "findings": [], "passed": 0, "exceptions": [],
+                "checked": 0, "errors": [exc.detail]}
+    for item in refs:
         ref = item["ref"]
         if ref.startswith("./"):
             passed.append(item)
@@ -916,7 +1003,11 @@ def cmd_audit_actions(args):
     if args.json:
         print(json.dumps(data, indent=2, sort_keys=True))
     else:
-        if data["findings"]:
+        if data.get("errors"):
+            print("eng audit-actions: ERROR — YAML could not be inspected")
+            for error in data["errors"]:
+                print(f"  {error['workflow']}:{error['line']}: {error['reason']}")
+        elif data["findings"]:
             print(f"eng audit-actions: {len(data['findings'])} unpinned action reference(s)")
             for f in data["findings"]:
                 print(f"  {f['workflow']}:{f['line']}: {f['ref']} — {f['reason']}")
@@ -929,7 +1020,7 @@ def cmd_audit_actions(args):
             print("exceptions:")
             for e in data["exceptions"]:
                 print(f"  {e['workflow']}:{e['line']}: {e['ref']}")
-    return 1 if data["findings"] else 0
+    return 2 if data.get("errors") else (1 if data["findings"] else 0)
 
 
 # ----------------------------------------------------------------------------- security
