@@ -866,7 +866,9 @@ def cmd_impact(args):
 
 def action_refs(root):
     refs = []
-    for path in sorted((Path(root) / ".github" / "workflows").glob("*.y*ml")):
+    paths = list((Path(root) / ".github" / "workflows").glob("*.y*ml"))
+    paths += list((Path(root) / ".agents" / "ci").glob("*.y*ml"))
+    for path in sorted(paths):
         text = read_text(path, limit=1_000_000)
         for lineno, line in enumerate(text.splitlines(), 1):
             match = re.match(r"\s*(?:-\s*)?uses:\s*[\"']?([^\"'\s#]+)", line)
@@ -1350,7 +1352,10 @@ def cmd_verify(args):
         print(f"  {mark:<8} {item['name']:<20} {item['duration_s']:>7.2f}s  exit={item['exit_code']}")
         if item["status"] != "pass" and item["required"]:
             required_failures.append(f"command:{item['name']}")
-    if args.profile == "full" and not args.skip_security:
+    if args.profile == "full" and args.skip_security:
+        blocked = True
+        unverified.append("full-profile security checks were skipped")
+    elif args.profile == "full":
         required, optional = security_plan(cfg)
         for name in required + optional:
             res = run_scanner(root, cfg, name, logdir)

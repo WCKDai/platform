@@ -135,6 +135,56 @@ class ControlsTests(unittest.TestCase):
         self.assertIn(pin, template)
         self.assertRegex(template, r"python -m pip install[^\n]*" + re.escape(pin))
 
+    def test_pin_audit_checks_active_and_installable_workflows(self):
+        names = (".github/workflows/fixture.yml", ".agents/ci/fixture.yaml")
+        for name in names:
+            path = self.root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("jobs:\n  fixture:\n    steps:\n      - uses: actions/checkout@v4\n")
+        data = eng.audit_actions_data(self.root)
+        self.assertEqual(data["checked"], 2)
+        self.assertEqual({item["workflow"] for item in data["findings"]}, set(names))
+        for name in names:
+            (self.root / name).write_text("      - uses: actions/checkout@" + "1" * 40 + "\n")
+        data = eng.audit_actions_data(self.root)
+        self.assertEqual(data["checked"], 2)
+        self.assertEqual(data["findings"], [])
+
+    def fixture_verification_args(self, profile):
+        path = self.root / ".agents/engineering.json"
+        path.parent.mkdir(exist_ok=True)
+        path.write_text(json.dumps({"schema": "eng-config/v1",
+                                   "commands": {profile: [{"name": "fixture-check", "run": "true"}]},
+                                   "security": {"required": ["gitleaks", "semgrep"], "optional": []}}))
+        self.git("add", ".agents/engineering.json")
+        self.git("commit", "-qm", "fixture verification config")
+        return SimpleNamespace(root=str(self.root), profile=profile, skip_security=True,
+                               changed=False, base=None)
+
+    def test_full_skip_security_is_blocked_and_cannot_authorize_release(self):
+        args = self.fixture_verification_args("full")
+        with mock.patch.object(eng, "run_scanner") as scanner, contextlib.redirect_stdout(io.StringIO()):
+            code = eng.cmd_verify(args)
+        scanner.assert_not_called()
+        record = json.loads(next((self.root / ".agents/evidence").glob("*.json")).read_text())
+        self.assertEqual(code, 2)
+        self.assertEqual(record["verdict"]["status"], "blocked")
+        self.assertIn("full-profile security checks were skipped", record["verdict"]["unverified"])
+        self.assertFalse(record["git"]["dirty"])
+        self.assertEqual(self.release(), "fail")
+        self.assertEqual(self.release(record["id"]), "fail")
+
+    def test_fast_profile_keeps_its_existing_no_security_contract(self):
+        args = self.fixture_verification_args("fast")
+        with mock.patch.object(eng, "run_scanner") as scanner, contextlib.redirect_stdout(io.StringIO()):
+            code = eng.cmd_verify(args)
+        scanner.assert_not_called()
+        record = json.loads(next((self.root / ".agents/evidence").glob("*.json")).read_text())
+        self.assertEqual(code, 0)
+        self.assertEqual(record["verdict"]["status"], "pass")
+        self.assertEqual(record["verdict"]["unverified"], [])
+        self.assertEqual(self.release(), "fail")
+
     def guard_all(self):
         with contextlib.redirect_stdout(io.StringIO()):
             return eng.cmd_guard(SimpleNamespace(root=self.root, all=True))

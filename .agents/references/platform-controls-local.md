@@ -11,6 +11,9 @@ also contains the corrected defects. No sibling worktree or uncommitted source w
 - Release evidence requires schema/hash validation, clean matching before/after HEAD snapshots,
   passing full-profile checks, and no unverified entries. Existing dirty evidence is retained but
   is intentionally ineligible for release; rerun verification on the clean commit.
+- Full-profile `--skip-security` records a blocked verdict and explicit unverified reason; it cannot
+  authorize a release. The fast profile keeps its existing command-only verification contract.
+- Action-pin auditing covers active workflows and installable YAML templates under `.agents/ci`.
 - The sample checkout does not persist its token. Analysis stays read-only, and RED demonstrations
   must retain the new test in the pre-fix checkout.
 - The sample installer provisions the same pinned zizmor as quality CI. No Gitleaks path exemption
