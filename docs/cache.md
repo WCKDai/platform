@@ -10,7 +10,9 @@
 
 ## GitHub organization configuration
 
-Organization variables and R2 secret access are selected for the eight current repositories.
+Organization variables and R2 secret access are selected for participating repositories
+(currently seven public repositories), separately from the eight-repository alpha runner selection.
+A repository can opt out of R2 without losing alpha runner access; use `cache: false` there.
 On GitHub Free they are usable only by public repositories; selecting a private repository does
 not make organization secrets or variables available there. No credential value is copied or
 rotated when changing an organization access policy.
@@ -57,6 +59,10 @@ reading a secret value. Keep local `R2_CONFIGURED=false` until the owner adds bu
 and authorizes testing; then enable it for the probe. Do not claim caching is active before the
 remote write/fresh-server hit succeeds. Do not publish private repository details in this public
 runbook. A paid plan upgrade is an owner billing decision, not an automated workaround.
+
+If a participating repository becomes public, verify its organization secret/variable grants
+before relying on inheritance. Remove obsolete private fallback variables only when they are
+unchanged setup values you own; preserve the repository-specific cache prefix and user edits.
 
 R2 prefixes keep cache keys organized; they are **not** credential-enforced security boundaries.
 All trusted repositories sharing a bucket-scoped token can access that bucket. Use separate

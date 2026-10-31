@@ -64,6 +64,7 @@ worker:
 
 cache:
   provider: cloudflare-r2
+  repository_access: selected-participating-repositories
   bucket_variable: R2_BUCKET
   endpoint_variable: R2_ENDPOINT
   region: auto

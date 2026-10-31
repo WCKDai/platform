@@ -41,7 +41,8 @@ See [GitHub environments](docs/github-environments.md) for every variable and se
 - Shared R2 sccache: [cache configuration](docs/cache.md)
 - Reusable trusted alpha builds: [shared workflow](.github/workflows/alpha-r2.yml) and
   [caller setup](docs/runners.md#shared-trusted-builds). Current-repository access is selected,
-  not a wildcard; private repos on GitHub Free need repository-local R2 credentials.
+  not a wildcard. R2 participation is separate from runner access; private repos on GitHub Free
+  need repository-local R2 credentials if they opt in to caching.
 - PolyCore task policy: [task schema](https://github.com/WCKDai/polycore/blob/main/agent/task.schema.json)
 
 ## Architecture
