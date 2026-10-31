@@ -143,7 +143,7 @@ class ControlsTests(unittest.TestCase):
         path = self.root / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content)
-        self.git("add", "--", name)
+        self.git("add", "-f", "--", name)
         return path
 
     def test_all_guard_scans_tracked_build_like_paths(self):
@@ -165,6 +165,17 @@ class ControlsTests(unittest.TestCase):
             self.assertTrue((tree / name).is_file(), name)
         self.assertFalse((tree / "untracked.txt").exists())
         self.assertNotIn("docs/build/env.txt", eng.tracked_files(self.root))
+
+    def test_secret_scans_include_force_added_evidence_and_worktree_paths(self):
+        names = ("docs/.worktrees/env.txt", ".agents/evidence/x.txt")
+        for name in names:
+            path = self.add_scan_fixture(name, "ghp_" + "0" * 36)
+            self.assertEqual(self.guard_all(), 1)
+            path.write_text("clean\n")
+        tree = Path(self.temp.name) / "scan-tree"
+        eng.make_tracked_tree(self.root, tree)
+        for name in names:
+            self.assertTrue((tree / name).is_file(), name)
 
     def test_secret_scan_enumeration_failure_is_not_a_clean_guard(self):
         original = eng.git
@@ -220,8 +231,8 @@ class ControlsTests(unittest.TestCase):
     def test_scan_copy_failure_is_error_not_pass(self):
         out = self.root / ".agents/evidence/scan"
         out.mkdir(parents=True)
-        with mock.patch.object(eng.os, "link", side_effect=OSError("fixture link error")), \
-                mock.patch.object(eng.shutil, "copy2", side_effect=OSError("fixture copy error")), \
+        with mock.patch.object(eng.shutil, "which", return_value="gitleaks"), \
+                mock.patch.object(eng, "tool_version", return_value="fixture"), \
                 mock.patch.object(eng.shutil, "copyfileobj", side_effect=OSError("fixture copy error")):
             result = eng.run_scanner(self.root, {}, "gitleaks", out)
         self.assertEqual(result["status"], "error")
@@ -236,13 +247,16 @@ class ControlsTests(unittest.TestCase):
                 raise PermissionError("fixture source read denied")
             return original_open(path, *args, **kwargs)
 
-        with mock.patch.object(eng.os, "open", side_effect=refuse_source):
+        with mock.patch.object(eng.shutil, "which", return_value="gitleaks"), \
+                mock.patch.object(eng, "tool_version", return_value="fixture"), \
+                mock.patch.object(eng.os, "open", side_effect=refuse_source):
             result = eng.run_scanner(self.root, {}, "gitleaks", out)
         self.assertEqual(result["status"], "error")
 
     def test_gitleaks_catches_formerly_exempt_paths(self):
         names = ("tests/fixtures/config.txt", "tests/test_eng.py", "evals/fixtures/config.txt",
-                 "evals/control-fixture/config.txt", "evals/agent/fixture/config.txt", "docs/build/env.txt")
+                 "evals/control-fixture/config.txt", "evals/agent/fixture/config.txt", "docs/build/env.txt",
+                 "docs/.worktrees/env.txt", ".agents/evidence/x.txt")
         # Never issued: deliberately fake, assembled high-entropy detector input.
         fake = "ghp_" + "FAKEq7R3m9T2v6Z4p8N1c5K0s2D9x7H3b6L8"
         for name in (*names, "ordinary-credential-fixture.txt"):

@@ -232,10 +232,6 @@ def tracked_scan_entries(root):
         parts = Path(path).parts
         if Path(path).is_absolute() or ".." in parts:
             raise ValueError("invalid index path")
-        # Evidence and other agents' isolated worktrees are separate trust boundaries.
-        if ".worktrees" in parts or any(parts[i:i + 2] == (".agents", "evidence")
-                                        for i in range(len(parts) - 1)):
-            continue
         if stage != "0" or mode not in ("100644", "100755", "120000", "160000"):
             raise ValueError("unmerged or unsupported index entry")
         entries.append((path, mode))
