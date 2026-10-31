@@ -1,9 +1,14 @@
 """Policy and remote-cache evidence contracts for the shared trusted workflow."""
 import ast
 import copy
+import json
+import os
 from pathlib import Path
 import re
+import subprocess
+import tempfile
 import textwrap
+from types import SimpleNamespace
 import unittest
 from unittest import mock
 
@@ -28,6 +33,19 @@ class AlphaPolicyTests(unittest.TestCase):
         called = WORKFLOW.split('  workflow_call:\n', 1)[1].split('\npermissions:', 1)[0]
         self.assertNotRegex(dispatch, r'\bcommand:', 'Manual writers must not bypass reviewed build commands')
         self.assertRegex(called, r'\bcommand:', 'Reviewed reusable callers retain build support')
+
+    def test_resource_guards_precede_the_trusted_command(self):
+        build_step = WORKFLOW.split('- name: Run the trusted caller build', 1)[1].split('- name: Stop only', 1)[0]
+        script = build_step.split('run: |', 1)[1]
+        command = 'nice -n 10 bash --noprofile --norc -eo pipefail -c "$BUILD_COMMAND"'
+        self.assertIn(command, script)
+        guards = (
+            '''[ "$(df -Pk . | awk 'NR==2 {print $4}')" -ge 10485760 ]''',
+            "awk '{ if ($1 > 24) exit 1 }' /proc/loadavg",
+        )
+        for guard in guards:
+            self.assertIn(guard, script)
+            self.assertLess(script.index(guard), script.index(command))
 
     def test_only_trusted_main_events_reach_alpha(self):
         self.assertIn("github.repository_owner == 'WCKDai' && github.ref == 'refs/heads/main'", WORKFLOW)
@@ -92,6 +110,45 @@ class CacheEvidenceTests(unittest.TestCase):
     def test_remote_write_and_hit_are_accepted(self):
         for phase in ('write', 'read'):
             scope['verify_stats'](self.data, phase)
+
+    def test_probe_failure_retains_cleanup_registration(self):
+        """Execute the actual probe with compiler/stop faults and no real subprocesses."""
+        for failure in ('compiler', 'phase-stop', 'final-stop'):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                github_env = root / 'github-env'
+                github_env.write_text('')
+                registrations = []
+
+                def run(args, **kwargs):
+                    operation = args[1]
+                    if operation == '--start-server':
+                        registrations.append(github_env.read_text())
+                    if operation == '--show-stats':
+                        return SimpleNamespace(returncode=0, stdout=json.dumps(self.data))
+                    if operation == 'gcc' and failure == 'compiler':
+                        return SimpleNamespace(returncode=1, stdout='')
+                    if operation == '--stop-server':
+                        if failure == 'phase-stop' and kwargs['timeout'] == 120:
+                            return SimpleNamespace(returncode=1, stdout='')
+                        if failure == 'final-stop' and kwargs['timeout'] == 30:
+                            raise subprocess.TimeoutExpired(args, 30)
+                    return SimpleNamespace(returncode=0, stdout='')
+
+                environment = {'RUNNER_TEMP': str(root), 'GITHUB_ENV': str(github_env),
+                               'GITHUB_RUN_ID': '100', 'GITHUB_RUN_ATTEMPT': '1'}
+                with mock.patch.dict(os.environ, environment, clear=True), \
+                        mock.patch('subprocess.run', side_effect=run), \
+                        mock.patch('socket.socket') as socket_factory, mock.patch('builtins.print'):
+                    socket_factory.return_value.__enter__.return_value.getsockname.return_value = ('127.0.0.1', 43210)
+                    expected_error = subprocess.TimeoutExpired if failure == 'final-stop' else RuntimeError
+                    with self.assertRaises(expected_error):
+                        exec(compile(PROBE, '<cache-probe-fault-fixture>', 'exec'), {})
+                self.assertTrue(registrations)
+                for registration in registrations:
+                    self.assertIn('SCCACHE_SERVER_PORT=43210\n', registration)
+                    self.assertIn('SCCACHE_DIR=', registration)
+                self.assertIn('SCCACHE_SERVER_PORT=43210\n', github_env.read_text())
 
     def test_local_fallback_is_not_remote_proof(self):
         self.data['cache_location'] = '/local/cache'
