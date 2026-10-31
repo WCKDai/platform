@@ -15,9 +15,12 @@ also contains the corrected defects. No sibling worktree or uncommitted source w
   must retain the new test in the pre-fix checkout.
 - The sample installer provisions the same pinned zizmor as quality CI. No Gitleaks path exemption
   is justified for nonexistent fixtures, so those exemptions are removed rather than expanded.
-- Secret scans use a strict index inventory, separate from heuristic source discovery, and include
-  every tracked path, including force-added evidence/worktree-named paths. Git itself excludes
-  untracked/generated files and nested worktrees. Gitlinks and tracked symlink targets are never traversed. Missing files,
+- Secret-scan inventory includes every tracked path, including force-added evidence/worktree-named
+  paths, separately from heuristic source discovery. Gitleaks retains its 2 MB target limit; larger
+  files are inventoried but not scanned by Gitleaks. The separate guard rejects files over its
+  2,000,000-byte limit, but `guard --all` is not part of the full profile. Git itself excludes
+  untracked/generated files and nested worktrees. Gitlinks and tracked symlink targets are never
+  traversed. Missing files,
   unexpected file types, symlink parents, index errors and failed copies fail closed rather than
   silently reducing scan coverage. Gitleaks still checks current tracked worktree bytes; the staged
   guard separately checks index blobs. Untracked/generated files are not added to scan coverage.
