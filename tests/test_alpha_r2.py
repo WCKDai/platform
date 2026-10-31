@@ -39,7 +39,9 @@ class AlphaPolicyTests(unittest.TestCase):
         self.assertNotRegex(WORKFLOW, r'contents:\s*write')
         self.assertNotIn('secrets: inherit', WORKFLOW)
         build_step = WORKFLOW.split('- name: Run the trusted caller build', 1)[1].split('- name: Stop only', 1)[0]
-        self.assertIn('BUILD_COMMAND: ${{ inputs.command }}', build_step)
+        env_block = build_step.split('env:\n', 1)[1].split('\n        shell:', 1)[0]
+        environment = dict(re.findall(r'^          ([A-Z_][A-Z0-9_]*): (.+)$', env_block, re.MULTILINE))
+        self.assertEqual(environment.get('BUILD_COMMAND'), '${{ inputs.command }}')
         self.assertNotIn('${{', build_step.split('run: |', 1)[1])
 
     def test_cache_is_fail_closed_and_job_is_isolated(self):
@@ -67,10 +69,11 @@ class AssertionCoverageTests(unittest.TestCase):
             AlphaPolicyTests().test_no_checkout_of_arbitrary_refs_or_persistent_credentials()
 
     def test_missing_build_command_environment_is_rejected(self):
-        changed = WORKFLOW.replace('BUILD_COMMAND: ${{ inputs.command }}', 'BUILD_COMMAND: fixed', 1)
-        self.assertNotEqual(changed, WORKFLOW)
-        with mock.patch.dict(globals(), WORKFLOW=changed), self.assertRaises(AssertionError):
-            AlphaPolicyTests().test_no_checkout_of_arbitrary_refs_or_persistent_credentials()
+        for replacement in ('BUILD_COMMAND: fixed', 'OLD_BUILD_COMMAND: ${{ inputs.command }}'):
+            changed = WORKFLOW.replace('BUILD_COMMAND: ${{ inputs.command }}', replacement, 1)
+            self.assertNotEqual(changed, WORKFLOW)
+            with self.subTest(replacement=replacement), mock.patch.dict(globals(), WORKFLOW=changed), self.assertRaises(AssertionError):
+                AlphaPolicyTests().test_no_checkout_of_arbitrary_refs_or_persistent_credentials()
 
 
 class CacheEvidenceTests(unittest.TestCase):
