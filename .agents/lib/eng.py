@@ -622,7 +622,7 @@ def cmd_guard(args):
     if args.all:
         paths = [root / f for f in tracked_files(root)]
     else:
-        res = git(root, "diff", "--cached", "--name-only", "-z", "--diff-filter=ACMRU")
+        res = git(root, "diff", "--cached", "--name-only", "-z", "--diff-filter=ACMRTU")
         if not res.ok:
             print(f"eng guard: {res.err.strip()}", file=sys.stderr)
             return 2

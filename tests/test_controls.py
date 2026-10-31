@@ -98,6 +98,18 @@ class ControlsTests(unittest.TestCase):
         path.write_text("ghp_" + "0" * 36)
         self.assertEqual(self.guard(), 0)
 
+    def test_guard_scans_staged_symlink_to_regular_type_change(self):
+        path = self.root / "fixture.txt"
+        path.symlink_to("notes.md")
+        self.git("add", "fixture.txt")
+        self.git("commit", "-qm", "fixture symlink")
+        path.unlink()
+        path.write_text("ghp_" + "0" * 36)
+        self.git("add", "fixture.txt")
+        self.assertTrue(self.git("diff", "--cached", "--name-status").startswith("T\t"))
+        path.write_text("clean disk must not hide staged content\n")
+        self.assertEqual(self.guard(), 1)
+
     def test_guard_index_read_error_fails_closed(self):
         self.stage("clean\n")
         original = eng.git
