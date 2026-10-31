@@ -4,6 +4,11 @@
   "commands": {
     "fast": [
       {
+        "name": "controls-tests",
+        "run": "python3 -B -m unittest discover -s tests -p test_controls.py -v",
+        "timeout": 120
+      },
+      {
         "name": "action-pins",
         "run": "./.agents/bin/eng audit-actions",
         "timeout": 120
@@ -20,6 +25,11 @@
       }
     ],
     "full": [
+      {
+        "name": "controls-tests",
+        "run": "python3 -B -m unittest discover -s tests -p test_controls.py -v",
+        "timeout": 120
+      },
       {
         "name": "action-pins",
         "run": "./.agents/bin/eng audit-actions",

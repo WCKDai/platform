@@ -557,25 +557,49 @@ def allowed(path, patterns):
     return any(fnmatch.fnmatch(path, p) or (p.endswith("/") and path.startswith(p)) for p in patterns)
 
 
-def scan_file(root, path, allow):
+def scan_file(root, path, allow, staged=False):
     findings = []
-    relpath = rel(root, path)
+    # Index paths are lexical: resolving a worktree symlink would inspect another file.
+    relpath = str(Path(path).relative_to(root))
     if allowed(relpath, allow):
         return findings
     name = Path(path).name
     if name in DENY_NAMES or Path(path).suffix.lower() in DENY_SUFFIXES:
         findings.append((relpath, 0, "sensitive-file", f"refusing to commit sensitive file name {name}"))
     p = Path(path)
-    if p.is_symlink() or not p.is_file():
-        return findings
     try:
-        size = p.stat().st_size
-    except OSError:
+        if staged:
+            entry = git(root, "ls-files", "--stage", "-z", "--", relpath, check=True)
+            entries = [item for item in entry.out.split("\0") if item]
+            if len(entries) != 1:
+                raise ValueError("missing or unmerged index entry")
+            metadata, _ = entries[0].split("\t", 1)
+            mode, oid, stage = metadata.split()
+            if stage != "0":
+                raise ValueError("unmerged index entry")
+            if mode in ("120000", "160000"):
+                return findings  # Do not dereference staged symlinks or submodules.
+            if mode not in ("100644", "100755"):
+                raise ValueError("unsupported index mode")
+            size = int(git(root, "cat-file", "-s", oid, check=True).out.strip())
+        else:
+            if p.is_symlink() or not p.is_file():
+                return findings
+            size = p.stat().st_size
+        if size > MAX_SCAN_BYTES:
+            findings.append((relpath, 0, "large-file", f"{size} bytes exceeds {MAX_SCAN_BYTES}"))
+            return findings
+        if staged:
+            blob = subprocess.run(["git", "-C", str(root), "cat-file", "blob", oid],
+                                  capture_output=True, timeout=60, check=True)
+            raw = blob.stdout
+            if len(raw) != size:
+                raise ValueError("index blob size changed")
+        else:
+            raw = p.read_bytes()
+    except (OSError, RuntimeError, ValueError, subprocess.SubprocessError):
+        findings.append((relpath, 0, "read-error", "cannot read file to scan; refusing unchecked content"))
         return findings
-    if size > MAX_SCAN_BYTES:
-        findings.append((relpath, 0, "large-file", f"{size} bytes exceeds {MAX_SCAN_BYTES}"))
-        return findings
-    raw = p.read_bytes()
     if b"\0" in raw[:8192]:
         return findings
     text = raw.decode("utf-8", errors="replace")
@@ -598,7 +622,7 @@ def cmd_guard(args):
     if args.all:
         paths = [root / f for f in tracked_files(root)]
     else:
-        res = git(root, "diff", "--cached", "--name-only", "-z", "--diff-filter=ACMR")
+        res = git(root, "diff", "--cached", "--name-only", "-z", "--diff-filter=ACMRU")
         if not res.ok:
             print(f"eng guard: {res.err.strip()}", file=sys.stderr)
             return 2
@@ -606,7 +630,7 @@ def cmd_guard(args):
     allow = load_allowlist(root)
     findings = []
     for path in paths:
-        findings += scan_file(root, path, allow)
+        findings += scan_file(root, path, allow, staged=not args.all)
     if findings:
         print(f"eng guard: {len(findings)} finding(s)")
         for path, line, rule, message in findings:
@@ -908,19 +932,23 @@ def run_scanner(root, cfg, name, outdir):
         c = cfg.get("security", {})
         cfg_path = root / c.get("gitleaks_config", ".agents/config/gitleaks.toml")
         history = bool(c.get("gitleaks_history", False))
-        if history:
-            args = [exe, "git", str(root), "--report-format", "json",
-                    "--report-path", str(outfile), "--redact", "--exit-code", "1",
-                    "--no-banner", "--max-target-megabytes", "2"]
-        else:
-            tree = Path(outdir) / "gitleaks-tree"
-            make_tracked_tree(root, tree)
-            args = [exe, "dir", str(tree), "--report-format", "json",
-                    "--report-path", str(outfile), "--redact", "--exit-code", "1",
-                    "--no-banner", "--max-target-megabytes", "2"]
-        if cfg_path.exists():
-            args += ["--config", str(cfg_path)]
-        res = sh(args, cwd=root, timeout=c.get("timeout", 600), env=env)
+        # Raw source copies must never enter the uploadable evidence directory.
+        temporary = tempfile.TemporaryDirectory(prefix="eng-gitleaks-") if not history else None
+        try:
+            if history:
+                args = [exe, "git", str(root)]
+            else:
+                tree = Path(temporary.name) / "tree"
+                make_tracked_tree(root, tree)
+                args = [exe, "dir", str(tree)]
+            args += ["--report-format", "json", "--report-path", str(outfile),
+                     "--redact", "--exit-code", "1", "--no-banner", "--max-target-megabytes", "2"]
+            if cfg_path.exists():
+                args += ["--config", str(cfg_path)]
+            res = sh(args, cwd=root, timeout=c.get("timeout", 600), env=env)
+        finally:
+            if temporary is not None:
+                temporary.cleanup()
         result["exit_code"] = res.code
         result["duration_s"] = round(res.dur, 2)
         logfile.write_text(redact_secrets(res.out + res.err), encoding="utf-8")
@@ -1378,6 +1406,41 @@ def cmd_artifact(args):
     return 0
 
 
+def usable_release_evidence(data, head_sha):
+    if not isinstance(data, dict) or data.get("schema") != EVIDENCE_SCHEMA:
+        return False
+    body = dict(data)
+    claimed = body.pop("sha256", None)
+    if not isinstance(claimed, str) or claimed != hash_obj(body):
+        return False
+    for key in ("git", "git_before"):
+        snapshot = data.get(key)
+        if (not isinstance(snapshot, dict) or snapshot.get("head") != head_sha
+                or snapshot.get("dirty") is not False):
+            return False
+    verdict = data.get("verdict")
+    return (data.get("profile") == "full" and isinstance(verdict, dict)
+            and verdict.get("status") == "pass" and verdict.get("exit_code") == 0
+            and verdict.get("required_failures") == [] and verdict.get("unverified") == [])
+
+
+def read_release_evidence(root, record_id, head_sha, expected_hash=None):
+    if not isinstance(record_id, str) or not re.fullmatch(r"[A-Za-z0-9._-]+", record_id):
+        return None
+    directory = evidence_dir(root).resolve()
+    candidate = directory / f"{record_id}.json"
+    try:
+        if candidate.resolve().parent != directory:
+            return None
+        data = json.loads(candidate.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if (not usable_release_evidence(data, head_sha) or data.get("id") != record_id
+            or (expected_hash is not None and data.get("sha256") != expected_hash)):
+        return None
+    return data
+
+
 def release_check_data(root, args):
     checks = []
     def check(name, ok, detail):
@@ -1411,32 +1474,25 @@ def release_check_data(root, args):
 
     evidence = None
     if args.evidence:
-        candidate = evidence_dir(root) / f"{args.evidence}.json"
-        if candidate.exists():
-            try:
-                evidence = json.loads(candidate.read_text(encoding="utf-8"))
-            except json.JSONDecodeError:
-                evidence = None
-            if evidence and (evidence.get("git", {}).get("head") != head_sha
-                             or evidence.get("profile") != "full"
-                             or evidence.get("verdict", {}).get("status") != "pass"):
-                evidence = None
+        evidence = read_release_evidence(root, args.evidence, head_sha)
     else:
         index = evidence_dir(root) / "index.jsonl"
         if index.exists():
-            for line in reversed([l for l in index.read_text(encoding="utf-8").splitlines() if l.strip()]):
+            try:
+                lines = index.read_text(encoding="utf-8").splitlines()
+            except (OSError, ValueError):
+                lines = []
+            for line in reversed([line for line in lines if line.strip()]):
                 try:
                     entry = json.loads(line)
                 except json.JSONDecodeError:
                     continue
-                candidate = root / entry["file"]
-                if not candidate.exists():
+                if (not isinstance(entry, dict) or not isinstance(entry.get("id"), str)
+                        or entry.get("file") != str(EVIDENCE_DIR / f"{entry['id']}.json")
+                        or not isinstance(entry.get("sha256"), str)):
                     continue
-                try:
-                    data = json.loads(candidate.read_text(encoding="utf-8"))
-                except json.JSONDecodeError:
-                    continue
-                if data.get("schema") == EVIDENCE_SCHEMA and data.get("git", {}).get("head") == head_sha and data.get("profile") == "full" and data.get("verdict", {}).get("status") == "pass":
+                data = read_release_evidence(root, entry["id"], head_sha, entry["sha256"])
+                if data is not None:
                     evidence = data
                     break
     check("passing full evidence for HEAD", evidence is not None,

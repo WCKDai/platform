@@ -39,8 +39,10 @@ be committed. Production data and credentials are out of scope.
 1. Reproduce with the smallest input. Record the command, exit code and relevant output.
 2. Add the regression test in the existing test file for that area. Use the project's naming and
    fixture style; avoid a new file named after the issue unless policy says otherwise.
-3. Run the test against the unfixed revision. Use `git stash`/a worktree, not a hand-edited
-   expectation, to prove it fails for the reported reason.
+3. Run the new test before implementing the fix in the current checkout. If the fix already exists,
+   carry a test-only patch into an isolated pre-fix worktree and run it there. Confirm the test is
+   present and discovered; a plain stash or a new worktree omitting the test cannot prove RED.
+   Never hand-edit expectations to manufacture failure.
 4. Implement the smallest fix. Do not combine it with a refactor.
 5. Run the new test, the neighboring tests, then the fast profile and the required full gate.
 6. Re-run the original reproduction. Confirm the failure mode is gone, not merely hidden.

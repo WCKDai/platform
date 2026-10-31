@@ -33,9 +33,11 @@ rules:
       cwe: "CWE-502: Deserialization of Untrusted Data"
       confidence: MEDIUM
     patterns:
-      - pattern: yaml.load($DATA)
+      - pattern: yaml.load($DATA, ...)
       - pattern-not: yaml.load($DATA, Loader=yaml.SafeLoader)
       - pattern-not: yaml.load($DATA, Loader=yaml.CSafeLoader)
+      - pattern-not: yaml.load($DATA, yaml.SafeLoader)
+      - pattern-not: yaml.load($DATA, yaml.CSafeLoader)
 
   - id: eng-rust-command-shell
     languages: [rust]

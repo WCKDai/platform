@@ -39,3 +39,16 @@ successful. `eng evidence verify` recomputes content hashes and checks the chain
   data from test output; treat evidence artifacts as confidential.
 - `eng evidence verify` failure means the record or chain was altered. Investigate; do not
   regenerate over it.
+
+## Release eligibility
+
+`release-check` only accepts a full-profile passing `eng-evidence/v1` record whose content hash
+recomputes correctly. Both `git_before` and `git` must describe clean current-HEAD snapshots, with
+no required failures or unverified checks. Dirty-tree evidence remains useful for development but
+cannot authorize a release after edits are stashed. Run full verification again on the clean commit.
+Explicit `--evidence` values are record IDs, not paths. Index selection additionally checks the
+index digest and restricts record paths to the evidence directory. Hashes detect corruption, not
+authenticity: evidence is not a signature or permission to publish.
+
+Gitleaks scans a disposable tracked-file tree outside evidence and removes it even when the scan
+fails or times out. Only redacted scanner reports/logs, not copied source trees, belong in uploads.
