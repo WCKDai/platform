@@ -166,5 +166,27 @@ class CacheEvidenceTests(unittest.TestCase):
             scope['verify_stats'](self.data, 'read')
 
 
+class CredentialsWorkflowTests(unittest.TestCase):
+    """alpha-r2-credentials.yml writes the R2 key on alpha: main, by hand, nothing else."""
+    TEXT = (ROOT / '.github/workflows/alpha-r2-credentials.yml').read_text()
+
+    def test_only_a_manual_main_run_reaches_alpha(self):
+        text = self.TEXT
+        self.assertIn("github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'", text)
+        self.assertNotRegex(text, re.compile(r'^\s*(pull_request|pull_request_target|push|workflow_call|schedule):', re.MULTILINE))
+        self.assertIn('group: trusted', text)
+        self.assertIn('[ "$ACTUAL_RUNNER" = alpha ]', text)
+
+    def test_no_checkout_permissions_or_interpolated_script(self):
+        text = self.TEXT
+        self.assertIn('permissions: {}', text)
+        self.assertNotIn('uses:', text)
+        self.assertNotIn('secrets: inherit', text)
+        script = text.split('run: |', 1)[1]
+        self.assertNotIn('${{', script)
+        self.assertIn('umask 077', script)
+        self.assertLess(script.index('umask 077'), script.index('printf'))
+
+
 if __name__ == '__main__':
     unittest.main()

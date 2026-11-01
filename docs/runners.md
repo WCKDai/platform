@@ -96,6 +96,20 @@ probe uses a unique port and fresh cache directories and stops only its own serv
 not hijack another build's daemon or repository prefix. Both a remote write and a hit from a
 fresh server are required; a local fallback, missing key or cache error is not a pass.
 
+## R2 key on alpha
+
+The R2 compile-cache key lives on alpha, in the runner user's `~/.aws/credentials` (mode 600), not
+in any repository's secrets. A repository's pull request runs its own copy of that repository's
+workflows, so it could read any secret the repository has, and a cache it could write would reach
+main's builds. Builds of main on alpha set `RUSTC_WRAPPER=sccache` and the non-secret `SCCACHE_*`
+variables; sccache takes the key from the credentials file.
+
+To install or rotate the key (org secrets `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`):
+
+1. Share both secrets with `WCKDai/platform` only.
+2. `gh workflow run alpha-r2-credentials.yml -R WCKDai/platform` (main) and wait for it.
+3. Share them with no repository again.
+
 ## Queueing and cost
 
 - Run `cargo nextest` archives and shards; build once.
